@@ -404,3 +404,18 @@ body.in-course{overflow:hidden}
 .deeplink b{display:block;font-size:13px}
 .deeplink>span:last-child{font-weight:800;color:var(--pri)}
 .lib-i .ext{margin-left:auto;font-weight:800;color:var(--pri)}
+
+/* code blocks: drag and drop */
+.k-fn{background:var(--mint)}.k-arr{background:var(--green)}.k-try{background:var(--rose,#fbe0e0)}
+.editor .bh{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.editor .bh input,.editor .bh select{cursor:auto;touch-action:auto}
+.palette .pblk:not(.locked){cursor:grab;touch-action:none}
+.dragging,.dragging *{cursor:grabbing !important;user-select:none;-webkit-user-select:none}
+.dragghost{position:fixed;left:0;top:0;z-index:1000;pointer-events:none;padding:6px 12px;border:1px solid var(--ink);border-radius:9px;font-weight:800;font-size:13px;box-shadow:3px 6px 0 var(--drop);opacity:.95;white-space:nowrap}
+.blk.dragsrc{opacity:.35}
+.dropline{height:4px;border-radius:3px;background:var(--green3);box-shadow:0 0 0 2px color-mix(in srgb,var(--green3) 30%,transparent)}
+.slot.dropin{background:color-mix(in srgb,var(--green) 30%,transparent)}
+.palette.trash{outline:2px dashed var(--bad,#e5484d);outline-offset:4px;border-radius:10px}
+.palette.trash::after{content:'Drop here to delete';font-size:12px;font-weight:700;color:var(--bad,#e5484d);align-self:center}
+.stats:has(#ordStat:not([hidden])){grid-template-columns:repeat(5,minmax(0,1fr))}
+@media (max-width:760px){.stats:has(#ordStat:not([hidden])){grid-template-columns:repeat(2,minmax(0,1fr))}}

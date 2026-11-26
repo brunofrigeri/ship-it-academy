@@ -1,7 +1,7 @@
 // ship_it() game: code phase (block programming) + startup phase (system design).
 import '../shared/support.css';
 import './game.css';
-import { runTick, runChallenge, CHALLENGES, countBlocks, mulberry32 } from './engine.js';
+import { runTick, runChallenge, CHALLENGES, countBlocks, mulberry32, KIDS } from './engine.js';
 import { simulate, STARTUPS, COMP, PALETTE, ALLOWED, KINDS, KIND_NEEDS, RPS_PER_USER, capOf, upkOf } from './sim.js';
 import { COURSE } from './course-data.js';
 import { SITE } from '../site.config.js';
@@ -52,6 +52,9 @@ const CONCEPTS = {
   nested: { t: 'Nested loops', d: 'Loops multiply: an outer loop of 5 around an inner loop of 5 runs the body 25 times. This is exactly how O(n²) algorithms appear in real code, which is great for earning and terrible for performance.', c: 'for (let i = 0; i < 5; i++)\n  for (let j = 0; j < 5; j++)\n    earn(); // 25 times' },
   bugs: { t: 'Bugs', d: 'Every earn() and commit() can introduce a real defect, like `TypeError: cart.total is undefined`. While any bug is open, earn() pays $0 and deploy() rolls back. fix() patches the oldest open bug for 4 ops; running it when nothing is broken wastes them.', c: 'earn();  // may throw: cart.total is undefined\nfix();   // patches the oldest bug (4 ops)' },
   if: { t: 'Conditionals', d: 'if/else lets the program react to state. Only pay for fix() when there actually is a bug. Checking a condition is cheap (1 op); doing unnecessary work is expensive.', c: 'if (bugs > 0) {\n  fix();\n} else {\n  earn();\n}' },
+  func: { t: 'Functions', d: 'A function gives a name to a group of statements. Define it once with `function helper() { }`, then call `helper()` from anywhere: inside loops, in both branches of an if, even from another function. The body is stored once, so every extra call costs just 1 block of memory. A function that calls itself forever never returns: that is a stack overflow, and here it halts the tick.', c: 'function helper() {\n  if (bugs > 0) fix();\n  else earn();\n}\nhelper();\nhelper();' },
+  arrays: { t: 'Arrays & iteration', d: 'Customers now place orders, and they pile up in an array: `orders`. ship() takes one order off the array and pays 5× earn(). A repeat loop runs a fixed number of times (wasting ops when there are fewer orders), but `for (const order of orders)` runs exactly once per item, however many there are. Iterating over data, not a hard-coded count, is how real programs handle lists. The array holds at most 40 orders; new orders beyond that are lost.', c: 'const orders = [o1, o2, o3];\nfor (const order of orders) {\n  ship(order); // runs 3 times\n}' },
+  trycatch: { t: 'Error handling', d: 'try { } catch { } turns a crash into something you handle. If a bug happens inside try, it is thrown as an exception: the rest of the try body is skipped, that unit of work pays nothing, and the catch body runs instead. The bug never reaches the tracker, so nothing gets blocked. Wrap small units of work: an error in a tiny try loses a little, an error in a huge one loses everything after it.', c: 'for (const order of orders) {\n  try {\n    ship(order);\n  } catch (err) {\n    // skip this order, keep going\n  }\n}' },
   vars: { t: 'Variables & state', d: '`changes` is a variable: state that survives between statements and even between ticks. commit() adds to it; deploy() pays changes² and resets it. But deploying while a bug is open rolls everything back. That is why real teams ship small, tested batches.', c: 'let changes = 0;\nchanges++;            // commit()\nif (changes >= 10) {\n  deploy();           // pays changes²\n}' },
   clientServer: { t: 'Client & server', d: 'Users (clients) send requests. Your app server runs code to answer them, and the database stores the data. Every request travels the whole path.', c: 'GET /abc123  →  app  →  SELECT url FROM links WHERE code = $1' },
   bottleneck: { t: 'Bottlenecks', d: 'A system is only as fast as its slowest part. If the database handles 60 req/s, a faster app server changes nothing. Find the red node first, then fix that.', c: 'throughput = min(app, db, …)' },
@@ -76,39 +79,43 @@ const CONCEPTS = {
 let uid = 1; const nid = () => 'b' + (uid++);
 const BASE = () => ({
   v: 2, study: true, phase: 'code', co: null, exits: 0, founded: [], money: 0, total: 0, mult: 1, prog: [],
-  unl: { earn: true }, lv: { earn: 0, cpu: 0, mem: 0, bits: 0, clock: 0, lint: 0, ci: 0 },
-  bugsOn: false, st: { bugs: 0, changes: 0 }, bugList: [], learned: ['statement'], solved: {}, chProg: {}, seen: {},
+  unl: { earn: true }, lv: { earn: 0, cpu: 0, mem: 0, bits: 0, clock: 0, lint: 0, ci: 0, cust: 0 },
+  bugsOn: false, st: { bugs: 0, changes: 0, orders: 0 }, bugList: [], learned: ['statement'], solved: {}, chProg: {}, seen: {},
   last: Date.now(), rate: 0,
 });
 let S = BASE();
 const SAVE = 'shipit-v1';
 function save() { try { S.last = Date.now(); localStorage.setItem(SAVE, JSON.stringify({ S, uid })); } catch (e) {} }
 function load() {
-  try { const raw = localStorage.getItem(SAVE); if (!raw) return; const o = JSON.parse(raw); if (!o || !o.S) return; if (o.S.v === 1) { o.S.lv.bits = o.S.lv.loop || 0; delete o.S.lv.loop; delete o.S.start; o.S.v = 2; } if (o.S.v !== 2) return; S = Object.assign(BASE(), o.S); uid = o.uid || 1000; } catch (e) {}
+  try { const raw = localStorage.getItem(SAVE); if (!raw) return; const o = JSON.parse(raw); if (!o || !o.S) return; if (o.S.v === 1) { o.S.lv.bits = o.S.lv.loop || 0; delete o.S.lv.loop; delete o.S.start; o.S.v = 2; } if (o.S.v !== 2) return; const b0 = BASE(); S = Object.assign(b0, o.S); S.lv = Object.assign(BASE().lv, o.S.lv); S.st = Object.assign(BASE().st, o.S.st); uid = o.uid || 1000; } catch (e) {}
 }
 
 /* ---------- economy ---------- */
-const env = () => ({ cpu: 6 + S.lv.cpu * 4, earnValue: 1 + S.lv.earn, bugChance: S.bugsOn ? 0.08 * Math.pow(0.8, S.lv.lint) : 0, deployValue: (1 + S.lv.earn) * 0.25 * Math.pow(2, S.lv.ci), maxLoop: bits() });
+const env = () => ({ cpu: 6 + S.lv.cpu * 4, earnValue: 1 + S.lv.earn, bugChance: S.bugsOn ? 0.08 * Math.pow(0.8, S.lv.lint) : 0, deployValue: (1 + S.lv.earn) * 0.03 * Math.pow(2, S.lv.ci), maxLoop: bits(), orderRate: S.unl.each ? 2 + S.lv.cust : 0, orderValue: (1 + S.lv.earn) * 5 });
 const bits = () => 3 + S.lv.bits;
 const memMax = () => 3 + S.lv.mem;
 const tps = () => 1 + S.lv.clock * 0.5;
 const incomeMult = () => S.mult;
 const UPG = [
-  { id: 'earn', name: 'Faster typing', d: 'earn() and hand-typing pay +$1 more.', base: 10, g: 1.55, show: () => true },
-  { id: 'cpu', name: 'Better CPU', d: '+4 ops per tick. Lets longer programs finish.', base: 20, g: 1.7, show: () => true },
-  { id: 'mem', name: 'More RAM', d: '+1 block of memory for your program.', base: 30, g: 1.9, max: 12, show: () => true },
-  { id: 'bits', name: 'Buy a bit', d: 'Max repeats = your bits. Each bit lets repeat() loop one more time.', base: 12, g: 1.32, max: 60, show: () => S.unl.repeat },
-  { id: 'clock', name: 'Overclock', d: '+0.5 ticks per second.', base: 120, g: 2.3, max: 6, show: () => S.total > 60 },
-  { id: 'lint', name: 'Linter', d: 'Bugs appear 20% less often.', base: 300, g: 2.4, max: 8, show: () => S.bugsOn },
-  { id: 'ci', name: 'CI pipeline', d: 'deploy() pays twice as much.', base: 4000, g: 3, max: 10, show: () => S.unl.commit },
+  { id: 'earn', name: 'Faster typing', d: 'earn() and hand-typing pay +$1 more (ship() pays 5×).', base: 10, g: 1.75, show: () => true },
+  { id: 'cpu', name: 'Better CPU', d: '+4 ops per tick. Lets longer programs finish.', base: 20, g: 1.9, show: () => true },
+  { id: 'mem', name: 'More RAM', d: '+1 block of memory for your program.', base: 30, g: 2.4, max: 12, show: () => true },
+  { id: 'bits', name: 'Buy a bit', d: 'Max repeats = your bits. Each bit lets repeat() loop one more time.', base: 12, g: 1.45, max: 60, show: () => S.unl.repeat },
+  { id: 'clock', name: 'Overclock', d: '+0.5 ticks per second.', base: 500, g: 3, max: 6, show: () => S.total > 300 },
+  { id: 'lint', name: 'Linter', d: 'Bugs appear 20% less often.', base: 400, g: 2.6, max: 8, show: () => S.bugsOn },
+  { id: 'cust', name: 'More customers', d: '+1 order arrives every tick.', base: 60000, g: 1.8, max: 30, show: () => S.unl.each },
+  { id: 'ci', name: 'CI pipeline', d: 'deploy() pays twice as much.', base: 2000000, g: 4, max: 10, show: () => S.unl.commit },
 ];
-const cost = u => Math.ceil(u.base * Math.pow(u.g, S.lv[u.id]));
+const cost = u => Math.ceil(u.base * Math.pow(u.g, S.lv[u.id] || 0));
 const UNL = [
-  { id: 'repeat', name: 'repeat (n) { }', concept: 'loop', price: 15, ch: 'c1', d: 'Loops: write once, run many times.', show: () => true },
-  { id: 'if', name: 'if (…) { } else { }', concept: 'if', price: 200, ch: 'c3', d: 'Conditionals: react to bugs and state.', show: () => S.bugsOn },
-  { id: 'commit', name: 'commit() / deploy()', concept: 'vars', price: 2500, ch: 'c4', d: 'Variables & state: batch work, ship it.', show: () => S.unl.if },
+  { id: 'repeat', name: 'repeat (n) { }', concept: 'loop', price: 25, ch: 'c1', d: 'Loops: write once, run many times.', show: () => true },
+  { id: 'if', name: 'if (…) { } else { }', concept: 'if', price: 1000, ch: 'c3', d: 'Conditionals: react to bugs and state.', show: () => S.bugsOn },
+  { id: 'func', name: 'function helper() { }', concept: 'func', price: 15000, ch: 'c7', d: 'Functions: name a piece of code, call it anywhere.', show: () => S.unl.if },
+  { id: 'each', name: 'for (order of orders)', concept: 'arrays', price: 120000, ch: 'c8', d: 'Arrays: customers send orders; ship() pays 5×.', show: () => S.unl.func },
+  { id: 'try', name: 'try { } catch { }', concept: 'trycatch', price: 1000000, ch: 'c9', d: 'Error handling: catch bugs before they block you.', show: () => S.unl.each },
+  { id: 'commit', name: 'commit() / deploy()', concept: 'vars', price: 5000000, ch: 'c4', d: 'State: batch changes, deploy pays changes².', show: () => S.unl.try },
 ];
-const START_PRICE = 20000; // minimum to found the first startup
+const START_PRICE = 25000000; // minimum to found the first startup
 
 /* ---------- blocks ---------- */
 const BDEF = {
@@ -118,17 +125,22 @@ const BDEF = {
   if: { k: 'k-ctl', label: 'if { } else { }', make: () => ({ t: 'if', cond: 'bug', k: 10, then: [], else: [] }) },
   commit: { k: 'k-var', label: 'commit()', make: () => ({ t: 'commit' }) },
   deploy: { k: 'k-var', label: 'deploy()', make: () => ({ t: 'deploy' }) },
+  func: { k: 'k-fn', label: 'function helper() { }', make: () => ({ t: 'func', body: [] }) },
+  call: { k: 'k-fn', label: 'helper()', make: () => ({ t: 'call' }) },
+  each: { k: 'k-arr', label: 'for (order of orders) { }', make: () => ({ t: 'each', body: [] }) },
+  ship: { k: 'k-arr', label: 'ship()', make: () => ({ t: 'ship' }) },
+  try: { k: 'k-try', label: 'try { } catch { }', make: () => ({ t: 'try', body: [], catch: [] }) },
 };
-const ORDER = ['earn', 'repeat', 'fix', 'if', 'commit', 'deploy'];
-function findList(prog, pid, key) { if (pid === 'root') return prog; let out = null; (function walk(l) { for (const n of l) { if (n.id === pid) { out = n[key]; return; } ['body', 'then', 'else'].forEach(k => n[k] && !out && walk(n[k])); } })(prog); return out; }
-function findParent(prog, id) { let out = null; (function walk(l) { l.forEach((n, i) => { if (n.id === id) out = { l, i }; ['body', 'then', 'else'].forEach(k => n[k] && !out && walk(n[k])); }); })(prog); return out; }
+const ORDER = ['earn', 'repeat', 'fix', 'if', 'func', 'call', 'each', 'ship', 'try', 'commit', 'deploy'];
+function findList(prog, pid, key) { if (pid === 'root') return prog; let out = null; (function walk(l) { for (const n of l) { if (n.id === pid) { out = n[key]; return; } KIDS.forEach(k => n[k] && !out && walk(n[k])); } })(prog); return out; }
+function findParent(prog, id) { let out = null; (function walk(l) { l.forEach((n, i) => { if (n.id === id) out = { l, i }; KIDS.forEach(k => n[k] && !out && walk(n[k])); }); })(prog); return out; }
 function findNode(prog, id) { const p = findParent(prog, id); return p ? p.l[p.i] : null; }
-function freshIds(l) { return l.map(n => { const m = Object.assign({}, n, { id: nid() }); ['body', 'then', 'else'].forEach(k => { if (m[k]) m[k] = freshIds(m[k]); }); return m; }); }
+function freshIds(l) { return l.map(n => { const m = Object.assign({}, n, { id: nid() }); KIDS.forEach(k => { if (m[k]) m[k] = freshIds(m[k]); }); return m; }); }
 
 /* Editor component: shared by main program and challenges */
 function Editor(host, opts) {
   const ed = { target: { pid: 'root', key: 'body' } };
-  const condLabel = { bug: 'bugs > 0', nobug: 'bugs == 0', changes: 'changes >=' };
+  const condLabel = { bug: 'bugs > 0', nobug: 'bugs == 0', orders: 'orders.length > 0', changes: 'changes >=' };
   function blockHTML(n) {
     const d = BDEF[n.t]; const runs = `<span class="runs" data-r="${n.id}">×0</span>`;
     const ctl = `<span class="ctl"><button data-a="up" data-id="${n.id}" aria-label="Move up">↑</button><button data-a="down" data-id="${n.id}" aria-label="Move down">↓</button><button data-a="del" data-id="${n.id}" aria-label="Delete">✕</button></span>`;
@@ -138,6 +150,9 @@ function Editor(host, opts) {
       const k = n.cond === 'changes' ? `<input type="number" min="1" max="999" value="${n.k}" data-f="k" data-id="${n.id}" aria-label="Threshold">` : '';
       return `<div class="blk ${d.k}" data-b="${n.id}"><div class="bh"><span class="kw">if</span>(<select data-f="cond" data-id="${n.id}" aria-label="Condition">${conds}</select>${k}) {${runs}${ctl}</div>${slotHTML(n.id, 'then', n.then)}<div class="else-l">} else {</div>${slotHTML(n.id, 'else', n.else)}<div class="kw">}</div></div>`;
     }
+    if (n.t === 'func') return `<div class="blk ${d.k}" data-b="${n.id}"><div class="bh"><span class="kw">function</span> helper() {${runs}${ctl}</div>${slotHTML(n.id, 'body', n.body)}<div class="kw">}</div></div>`;
+    if (n.t === 'each') return `<div class="blk ${d.k}" data-b="${n.id}"><div class="bh"><span class="kw">for</span> (const order of orders) {${runs}${ctl}</div>${slotHTML(n.id, 'body', n.body)}<div class="kw">}</div></div>`;
+    if (n.t === 'try') return `<div class="blk ${d.k}" data-b="${n.id}"><div class="bh"><span class="kw">try</span> {${runs}${ctl}</div>${slotHTML(n.id, 'body', n.body)}<div class="else-l">} catch (err) {</div>${slotHTML(n.id, 'catch', n.catch)}<div class="kw">}</div></div>`;
     return `<div class="blk ${d.k}" data-b="${n.id}"><div class="bh"><span class="kw">${d.label}</span>${runs}${ctl}</div></div>`;
   }
   function slotHTML(pid, key, list) {
@@ -150,7 +165,7 @@ function Editor(host, opts) {
     host.innerHTML = `<div class="fn">function tick() {</div>${slotHTML('root', 'body', prog)}<div class="fn" style="margin:6px 0 0">}</div>`;
     const pal = opts.palette;
     if (pal) pal.innerHTML = ORDER.filter(t => opts.allowed(t) !== 'hide').map(t => {
-      const a = opts.allowed(t); return `<button class="pblk ${BDEF[t].k} ${a ? '' : 'locked'}" data-add="${t}" ${a ? '' : 'disabled title="Locked"'}>${a ? '' : '🔒 '}${BDEF[t].label}</button>`;
+      const a = opts.allowed(t), one = t === 'func' && a && JSON.stringify(prog).includes('"t":"func"'); return `<button class="pblk ${BDEF[t].k} ${a && !one ? '' : 'locked'}" data-add="${t}" ${a ? (one ? 'disabled title="Only one helper() per program"' : '') : 'disabled title="Locked"'}>${a ? '' : '🔒 '}${BDEF[t].label}</button>`;
     }).join('');
     opts.after && opts.after();
   };
@@ -159,7 +174,7 @@ function Editor(host, opts) {
     if (countBlocks(prog) >= opts.max()) { opts.full && opts.full(); host.animate && host.animate([{ transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'none' }], { duration: 200 }); return; }
     const l = findList(prog, ed.target.pid, ed.target.key) || prog;
     const n = Object.assign({ id: nid() }, BDEF[t].make()); l.push(n);
-    if (n.t === 'repeat') ed.target = { pid: n.id, key: 'body' };
+    if (n.t === 'repeat' || n.t === 'func' || n.t === 'each' || n.t === 'try') ed.target = { pid: n.id, key: 'body' };
     if (n.t === 'if') ed.target = { pid: n.id, key: 'then' };
     opts.changed(); ed.render();
   };
@@ -180,6 +195,68 @@ function Editor(host, opts) {
     opts.changed(); ed.render();
   });
   if (opts.palette) opts.palette.addEventListener('click', e => { const b = e.target.closest('[data-add]'); if (b && !b.disabled) ed.add(b.dataset.add); });
+  /* drag and drop: palette → anywhere, block → anywhere (also into repeat/if/function/for/try bodies); drop on the palette to delete */
+  let drag = null, suppress = false;
+  const within = (el, sel) => el && el.closest(sel);
+  function startCandidate(e, info) {
+    if (e.button > 0) return;
+    drag = Object.assign({ x0: e.clientX, y0: e.clientY, on: false, pid: e.pointerId }, info);
+    window.addEventListener('pointermove', onMove, { passive: false }); window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', onCancel);
+  }
+  host.addEventListener('pointerdown', e => {
+    const bh = within(e.target, '.bh'); if (!bh || within(e.target, 'input,select,button')) return;
+    const blk = bh.closest('[data-b]'); if (!blk || !host.contains(blk)) return;
+    startCandidate(e, { id: blk.dataset.b, el: blk, label: bh.querySelector('.kw') ? bh.textContent.replace(/×\d+.*$/, '').trim() : '' });
+  });
+  if (opts.palette) opts.palette.addEventListener('pointerdown', e => { const b = within(e.target, '[data-add]'); if (!b || b.disabled) return; startCandidate(e, { add: b.dataset.add, el: b, label: BDEF[b.dataset.add].label }); });
+  function clearMarks() { document.querySelectorAll('.dropline').forEach(x => x.remove()); host.querySelectorAll('.slot.dropin').forEach(x => x.classList.remove('dropin')); if (opts.palette) opts.palette.classList.remove('trash'); }
+  function onMove(e) {
+    if (!drag) return;
+    if (!drag.on) {
+      if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
+      drag.on = true; suppress = true;
+      drag.ghost = document.createElement('div'); drag.ghost.className = 'dragghost ' + (BDEF[drag.add || (findNode(opts.get(), drag.id) || {}).t] || {}).k;
+      drag.ghost.textContent = drag.add ? BDEF[drag.add].label : (drag.label || 'block').slice(0, 40); document.body.appendChild(drag.ghost);
+      if (drag.id) drag.el.classList.add('dragsrc'); document.body.classList.add('dragging');
+    }
+    e.preventDefault();
+    drag.ghost.style.transform = `translate(${e.clientX + 12}px, ${e.clientY + 8}px)`;
+    if (e.clientY < 50) window.scrollBy(0, -12); else if (e.clientY > innerHeight - 50) window.scrollBy(0, 12);
+    clearMarks(); drag.drop = null;
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    if (drag.id && opts.palette && within(under, '.palette') === opts.palette) { opts.palette.classList.add('trash'); drag.drop = { trash: true }; return; }
+    let slot = under && under.closest('.slot');
+    if (!slot || !host.contains(slot)) { if (under && host.contains(under)) slot = host.querySelector('.slot.root'); else return; }
+    if (drag.id && drag.el.contains(slot)) return; // can't drop a block inside itself
+    const kids = [...slot.children].filter(c => c.matches('[data-b]') && c !== drag.el);
+    let idx = kids.findIndex(c => { const r = c.getBoundingClientRect(); return e.clientY < r.top + r.height / 2; });
+    if (idx < 0) idx = kids.length;
+    const line = document.createElement('div'); line.className = 'dropline';
+    slot.insertBefore(line, kids[idx] || slot.querySelector(':scope > .addhere'));
+    slot.classList.add('dropin');
+    drag.drop = { pid: slot.dataset.pid, key: slot.dataset.key, idx };
+  }
+  function finish() { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); window.removeEventListener('pointercancel', onCancel); clearMarks(); document.body.classList.remove('dragging'); if (drag) { drag.ghost && drag.ghost.remove(); drag.el && drag.el.classList.remove('dragsrc'); } setTimeout(() => { suppress = false; }, 0); }
+  function onCancel() { finish(); drag = null; }
+  function onUp() {
+    const d = drag; finish(); drag = null; if (!d || !d.on || !d.drop) return;
+    const prog = opts.get();
+    if (d.drop.trash) { const p = findParent(prog, d.id); if (p) { p.l.splice(p.i, 1); opts.changed(); ed.render(); } return; }
+    const list = findList(prog, d.drop.pid, d.drop.key); if (!list) return;
+    if (d.add) {
+      if (countBlocks(prog) >= opts.max()) { opts.full && opts.full(); return; }
+      if (d.add === 'func' && JSON.stringify(prog).includes('"t":"func"')) return;
+      const n = Object.assign({ id: nid() }, BDEF[d.add].make()); list.splice(Math.min(d.drop.idx, list.length), 0, n);
+      if (n.body) ed.target = { pid: n.id, key: n.t === 'if' ? 'then' : 'body' };
+    } else {
+      const p = findParent(prog, d.id); if (!p) return; const [n] = p.l.splice(p.i, 1);
+      list.splice(Math.min(d.drop.idx, list.length), 0, n);
+    }
+    opts.changed(); ed.render();
+    const el = host.querySelector(`[data-b="${d.id || ''}"]`); el && el.classList.add('flash');
+  }
+  host.addEventListener('click', e => { if (suppress) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  if (opts.palette) opts.palette.addEventListener('click', e => { if (suppress) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
   ed.showRuns = counts => { host.querySelectorAll('[data-r]').forEach(s => { const c = counts[s.dataset.r] || 0; s.textContent = '×' + c; s.classList.toggle('hot', c > 0); }); };
   return ed;
 }
@@ -189,8 +266,13 @@ function toJS(prog, ind = 1) {
   const p = '  '.repeat(ind), K = s => `<span class="c-k">${s}</span>`, F = s => `<span class="c-f">${s}</span>`, N = s => `<span class="c-n">${s}</span>`;
   return prog.map(n => {
     if (n.t === 'repeat') { const v = 'ijklm'[Math.min(ind - 1, 4)]; return `${p}${K('for')} (${K('let')} ${v} = ${N(0)}; ${v} &lt; ${N(n.n)}; ${v}++) {\n${toJS(n.body, ind + 1)}${p}}\n`; }
-    if (n.t === 'if') { const c = n.cond === 'bug' ? `bugs &gt; ${N(0)}` : n.cond === 'nobug' ? `bugs === ${N(0)}` : `changes &gt;= ${N(n.k)}`; return `${p}${K('if')} (${c}) {\n${toJS(n.then, ind + 1)}${p}} ${K('else')} {\n${toJS(n.else, ind + 1)}${p}}\n`; }
+    if (n.t === 'if') { const c = n.cond === 'bug' ? `bugs &gt; ${N(0)}` : n.cond === 'nobug' ? `bugs === ${N(0)}` : n.cond === 'orders' ? `orders.length &gt; ${N(0)}` : `changes &gt;= ${N(n.k)}`; return `${p}${K('if')} (${c}) {\n${toJS(n.then, ind + 1)}${p}} ${K('else')} {\n${toJS(n.else, ind + 1)}${p}}\n`; }
     if (n.t === 'commit') return `${p}${F('commit')}(); <span class="c-c">// changes++</span>\n`;
+    if (n.t === 'func') return `${p}${K('function')} ${F('helper')}() {\n${toJS(n.body, ind + 1)}${p}}\n`;
+    if (n.t === 'call') return `${p}${F('helper')}();\n`;
+    if (n.t === 'each') return `${p}${K('for')} (${K('const')} order ${K('of')} orders) {\n${toJS(n.body, ind + 1)}${p}}\n`;
+    if (n.t === 'ship') return `${p}${F('ship')}(orders.${F('shift')}());\n`;
+    if (n.t === 'try') return `${p}${K('try')} {\n${toJS(n.body, ind + 1)}${p}} ${K('catch')} (err) {\n${toJS(n.catch || [], ind + 1)}${p}}\n`;
     return `${p}${F(n.t)}();\n`;
   }).join('');
 }
@@ -220,8 +302,8 @@ function learn(k) {
 /* ---------- main editor ---------- */
 const mainEd = Editor($('editor'), {
   get: () => S.prog, palette: $('palette'), max: memMax, maxLoop: bits,
-  allowed: t => ({ earn: true, repeat: S.unl.repeat, fix: S.bugsOn ? true : 'hide', if: S.bugsOn ? S.unl.if : 'hide', commit: S.unl.if ? S.unl.commit : 'hide', deploy: S.unl.if ? S.unl.commit : 'hide' })[t],
-  conds: () => S.unl.commit ? ['bug', 'nobug', 'changes'] : ['bug', 'nobug'],
+  allowed: t => { const nx = UNL.find(u => !S.unl[u.id] && u.show()); const peek = id => S.unl[id] ? true : nx && nx.id === id ? false : 'hide'; return ({ earn: true, repeat: S.unl.repeat, fix: S.bugsOn ? true : 'hide', if: S.bugsOn ? S.unl.if : 'hide', func: peek('func'), call: S.unl.func ? true : 'hide', each: peek('each'), ship: S.unl.each ? true : 'hide', try: peek('try'), commit: peek('commit'), deploy: S.unl.commit ? true : 'hide' })[t]; },
+  conds: () => ['bug', 'nobug'].concat(S.unl.each ? ['orders'] : [], S.unl.commit ? ['changes'] : []),
   changed: () => { save(); }, full: () => toast('Out of memory! Buy more RAM or use a loop.'),
   after: () => { $('src').innerHTML = srcOf(S.prog); updateMeters(); mentor(); },
 });
@@ -238,13 +320,19 @@ function updateMeters() {
 }
 function mentor() {
   let m;
-  if (!S.prog.length && S.total < 5) m = 'Welcome! Your program is empty, so nothing runs yet. Add an <b>earn()</b> block from the palette to start earning every tick, or type code by hand.';
-  else if (S.total < 5) m = 'Your program now earns every tick, and you can still type code by hand. Everything you unlock appears on this page, and the 📖 Library explains every concept and component anytime.';
+  if (!S.prog.length && S.total < 5) m = 'Welcome! Your program is empty, so nothing runs yet. Drag an <b>earn()</b> block into your program (or click it) to start earning every tick, or type code by hand.';
+  else if (S.total < 5) m = 'Your program now earns every tick, and you can still type code by hand. Drag blocks to reorder them or drop them inside other blocks.';
   else if (!S.unl.repeat) m = 'Memory is tiny: only a few blocks fit. Buy <b>repeat</b> in Concepts (right), or hit <b>Prove it</b> to earn it free.';
-  else if (!has('repeat')) m = 'Wrap earn() inside a repeat block: click repeat, and new blocks go inside it. One loop does the work of many lines.';
+  else if (!has('repeat')) m = 'Drag earn() inside a repeat block. One loop does the work of many lines.';
   else if (S.bugsOn && S.st.bugs > 0 && !has('fix')) m = `Stuck on <b>${esc(S.bugList[0] ? bugTitle(S.bugList[0]) : 'a bug')}</b>. earn() pays $0 until you add <b>fix()</b> to your program.`;
   else if (S.bugsOn && !S.unl.if) m = 'fix() costs 4 ops even when nothing is broken. Unlock <b>if/else</b> so you only fix when bugs > 0.';
-  else if (S.unl.if && !S.unl.commit) m = 'Nice branching. Next: <b>commit/deploy</b>. Big batches pay changes², but a single bug rolls them back.';
+  else if (!S.unl.func) m = 'Your program keeps repeating the same pieces. Unlock <b>functions</b>: write a piece once, call it from anywhere.';
+  else if (!has('call')) m = 'Put your "fix or earn" logic inside <b>function helper()</b>, then drop <b>helper()</b> calls wherever you need it.';
+  else if (!S.unl.each) m = 'Customers want to buy from you. Unlock <b>arrays</b>: orders pile up in a list, and ship() pays 5× earn().';
+  else if (!has('each')) m = `${S.st.orders || 0} orders are waiting. Drag <b>for (order of orders)</b> in and put <b>ship()</b> inside it: it runs once per order, no bits needed.`;
+  else if (!S.unl.try) m = 'Every bug blocks all your income until fix() runs. Unlock <b>try/catch</b> to handle errors where they happen.';
+  else if (!has('try')) m = 'Wrap small units of work in <b>try { }</b>: a bug inside is caught, that one item is lost, and nothing gets blocked.';
+  else if (!S.unl.commit) m = 'Last concept before you can start a company: <b>commit/deploy</b>. Big batches pay changes², but one open bug rolls them back.';
   else m = `Save at least ${money(START_PRICE)} and found your first startup. Warning: it costs <b>everything</b> you have and your program is deleted.`;
   $('mentor').innerHTML = m;
 }
@@ -289,7 +377,7 @@ function tick() {
   S.money += gain; S.total += gain;
   S.rate = S.rate * 0.8 + gain * tps() * 0.2;
   mainEd.showRuns(lastRun.counts);
-  $('sEarn').textContent = money(gain); $('sBugs').textContent = S.st.bugs; $('sChg').textContent = S.st.changes; $('sWaste').textContent = lastRun.wasted;
+  $('sEarn').textContent = money(gain); $('sBugs').textContent = S.st.bugs; $('sChg').textContent = S.st.changes; $('sOrd').textContent = S.st.orders || 0; $('ordStat').hidden = !S.unl.each; $('sWaste').textContent = lastRun.wasted;
   // bug bookkeeping: new bugs join the queue, fix() patches the oldest
   const born = lastRun.bugFrom.map(makeBug); S.bugList.push(...born);
   const fixed = S.bugList.splice(0, Math.min(lastRun.fixes, S.bugList.length)); syncBugs();
@@ -297,6 +385,9 @@ function tick() {
   if (fixed.length) log(`🔧 fix() patched ${fixed.length > 2 ? fixed.length + ' bugs' : fixed.map(b => b.name).join(', ')}`, 'g');
   if (lastRun.rollbacks) log(`↩ deploy() rolled back ${lastRun.lost} changes: ${S.bugList[0] ? S.bugList[0].name : 'a bug'} was still open`, 'e');
   if (lastRun.deploys && gain > 0) log(`🚀 deployed → ${money(gain)}`, 'g');
+  if (lastRun.caught) log(`🧯 catch handled ${lastRun.caught} error${lastRun.caught > 1 ? 's' : ''}: that work was skipped, nothing blocked`, 'y');
+  if (lastRun.stack && !S.seen.stack) { S.seen.stack = 1; log('💥 RangeError: Maximum call stack size exceeded. helper() keeps calling itself, so the tick was halted.', 'e'); }
+  if (lastRun.overflow > 0 && !S.seen.ovf) { S.seen.ovf = 1; log(`📦 The orders array is full (40). New orders are being lost: ship faster!`, 'y'); }
   if (lastRun.halted && !S.seen.halt) { S.seen.halt = 1; log(`⏹ CPU limit hit (${e.cpu} ops). Remaining blocks were skipped this tick.`, 'y'); }
   if (lastRun.blocked && !born.length && S.bugList[0]) log(`⏸ earn() paid $0: blocked by ${S.bugList[0].name}${has('fix') ? '' : '. Add fix()!'}`, 'y');
   renderTracker();
@@ -329,13 +420,15 @@ function renderShop(force) {
     if (!u.show()) { if (nextShown) return ''; nextShown = true; return `<div class="ur locked"><h3>🔒 ???</h3><p>Keep progressing to reveal the next concept.</p></div>`; }
     const ch = CHALLENGES.find(c => c.id === u.ch);
     return `<div class="ur${isNew('u' + u.id)}"><h3>${u.name}</h3><div class="acts"><button class="btn vio" data-go="${u.ch}" title="Solve '${ch.title}' to unlock for free">Prove it</button><button class="btn pri" data-unl="${u.id}" ${S.money < u.price ? 'disabled' : ''}>${money(u.price)}</button></div><p>${u.d}</p></div>`;
-  }).join('') + ((S.unl.if || S.total > 5000) ? `<div class="ur big${isNew('buyst')}"><h3>🚀 Found a startup</h3><button class="btn" data-pick="1" ${S.money < START_PRICE ? 'disabled' : ''}>${S.money < START_PRICE ? 'Need ' + money(START_PRICE) : 'Choose…'}</button><p>Twitter, Instagram or Drive-style. Costs everything you have; your program is deleted. Unlocks system design.</p></div>` : '');
+  }).join('') + ((S.unl.try || S.total > 1e6) ? `<div class="ur big${isNew('buyst')}"><h3>🚀 Found a startup</h3><button class="btn" data-pick="1" ${S.money < START_PRICE ? 'disabled' : ''}>${S.money < START_PRICE ? 'Need ' + money(START_PRICE) : 'Choose…'}</button><p>Start small: a URL shortener, a todo app, a blog, a newsletter. Costs everything you have; your program is deleted. Unlocks system design.</p></div>` : '');
   $('upgrades').innerHTML = UPG.filter(u => u.show()).map(u => { const maxed = u.max && S.lv[u.id] >= u.max, c = cost(u); return `<div class="ur${isNew('g' + u.id)}"><h3>${u.name} <span class="lvl">lv ${S.lv[u.id]}${u.max ? '/' + u.max : ''}</span></h3>${maxed ? '<span class="tag">max</span>' : `<button class="btn" data-up="${u.id}" ${S.money < c ? 'disabled' : ''}>${money(c)}</button>`}<p>${u.d}</p></div>`; }).join('');
   renderChList();
 }
 function unlock(id, viaChallenge) {
   if (S.unl[id]) return; const u = UNL.find(x => x.id === id); S.unl[id] = true;
   if (id === 'commit') S.unl.deploy = true;
+  if (id === 'func') S.unl.call = true;
+  if (id === 'each') { S.unl.ship = true; S.st.orders = S.st.orders || 0; }
   log(`★ unlocked ${u.name}${viaChallenge ? ' (challenge)' : ''}`, 'g'); learn(u.concept); mainEd.render(); renderShop(true); renderTabs(); save();
 }
 document.body.addEventListener('click', e => {
@@ -347,8 +440,8 @@ document.body.addEventListener('click', e => {
 
 /* ---------- challenges ---------- */
 let chEd = null, chRes = null;
-const CH_CONCEPT = { c1: 'loop', c2: 'nested', c3: 'if', c4: 'vars' };
-const chVisible = c => c.tier === 'Warm-up' || (c.tier === 'Core' && (S.unl.repeat || S.total > 30)) || (c.tier === 'Hard' && S.unl.if);
+const CH_CONCEPT = { c1: 'loop', c2: 'nested', c3: 'if', c4: 'vars', c7: 'func', c8: 'arrays', c9: 'trycatch' };
+const chVisible = c => !c.need || (c.need === 'bugs' ? S.bugsOn : !!S.unl[c.need]);
 function renderChList() {
   const vis = CHALLENGES.filter(chVisible);
   $('chCount').textContent = `${Object.keys(S.solved).length}/${CHALLENGES.length} solved`;
@@ -358,19 +451,21 @@ function openChal(id) {
   const c = CHALLENGES.find(x => x.id === id); if (!S.chProg[c.id]) S.chProg[c.id] = [];
   $('mbox').classList.add('wide');
   $('mbox').innerHTML = `<div class="sec-h" style="margin:0"><h2>${c.title}</h2><span class="tag ${c.tier === 'Hard' ? 'r' : c.tier === 'Core' ? 'o' : 'g'}">${c.tier}</span><span style="margin-left:auto"><button class="btn" id="chClose">Close</button></span></div><p style="margin:0">${c.desc}</p>
-    <div style="display:flex;flex-wrap:wrap;gap:6px"><span class="tag">CPU ${c.env.cpu} ops</span><span class="tag">max ${c.maxBlocks} blocks</span><span class="tag">loop ≤ ${c.env.maxLoop}</span>${c.env.bugChance ? `<span class="tag r">bugs ${Math.round(c.env.bugChance * 100)}%</span>` : ''}${c.ticks ? `<span class="tag v">${c.ticks} ticks</span>` : ''}<span class="tag y">target ${money(c.target)}</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px"><span class="tag">CPU ${c.env.cpu} ops</span><span class="tag">max ${c.maxBlocks} blocks</span><span class="tag">loop ≤ ${c.env.maxLoop}</span>${c.env.orderRate ? `<span class="tag">+${c.env.orderRate} orders/tick · ship() pays ${money(c.env.orderValue)}</span>` : ''}${c.env.bugChance ? `<span class="tag r">bugs ${Math.round(c.env.bugChance * 100)}%</span>` : ''}${c.ticks ? `<span class="tag v">${c.ticks} ticks</span>` : ''}<span class="tag y">target ${money(c.target)}</span></div>
     <div class="chl" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)"><div><div class="palette" id="chPal"></div><div class="editor" id="chEdHost"></div></div><div><pre class="src" id="chSrc"></pre><div id="chOut"></div></div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn pri" id="runCh">▶ Run tests (${c.seeds} run${c.seeds > 1 ? 's' : ''})</button><button class="btn" id="clrCh">Clear</button><span class="lvl" id="chMem"></span></div>`;
   $('modal').classList.add('on');
   $('chClose').onclick = () => closeModal();
   chEd = Editor($('chEdHost'), {
     get: () => S.chProg[c.id], palette: $('chPal'), max: () => c.maxBlocks, maxLoop: () => c.env.maxLoop,
-    allowed: t => c.blocks.includes(t) ? true : 'hide', conds: () => c.blocks.includes('commit') ? ['bug', 'nobug', 'changes'] : ['bug', 'nobug'],
+    allowed: t => c.blocks.includes(t) ? true : 'hide', conds: () => ['bug', 'nobug'].concat(c.blocks.includes('each') ? ['orders'] : [], c.blocks.includes('commit') ? ['changes'] : []),
     changed: () => { chRes = null; $('chOut').innerHTML = ''; save(); }, full: () => toast(`This challenge allows only ${c.maxBlocks} blocks.`),
     after: () => { $('chSrc').innerHTML = srcOf(S.chProg[c.id]); $('chMem').textContent = `${countBlocks(S.chProg[c.id])}/${c.maxBlocks} blocks`; },
   });
   chEd.render();
   $('runCh').onclick = () => {
+    const missing = (c.must || []).filter(t => !JSON.stringify(S.chProg[c.id]).includes(`"t":"${t}"`));
+    if (missing.length) { $('chOut').innerHTML = `<div class="res no">✗ This challenge is about using ${missing.map(t => '<code>' + BDEF[t].label + '</code>').join(' and ')}. Add ${missing.length > 1 ? 'them' : 'it'} to your solution.</div>`; return; }
     const r = runChallenge(c, S.chProg[c.id]), ok = r.avg >= c.target;
     $('chOut').innerHTML = `<div class="res ${ok ? 'ok' : 'no'}">${ok ? '✓ Passed' : '✗ Not yet'}: average ${money(r.avg)} (worst run ${money(r.worst)}), target ${money(c.target)}${ok ? '' : c.env.bugChance ? '. Tip: look at wasted ops, and when fix() runs.' : '. Tip: count how many times earn() runs.'}</div>`;
     if (ok && !S.solved[c.id]) {
@@ -387,7 +482,7 @@ function openChal(id) {
 
 /* ---------- phase 2: startups ---------- */
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const MIN_FOUND = 20000;
+const MIN_FOUND = START_PRICE;
 const OFFERS = [
   { id: 'angel', at: 25, name: 'Angel investor', amt: 2500, eq: 0.05 },
   { id: 'pre', at: 400, name: 'Pre-seed round', amt: 15000, eq: 0.10 },
@@ -412,7 +507,8 @@ const ICO = {
 const ico = (t, s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICO[t]}</svg>`;
 const repMult = () => Math.pow(1.5, S.exits || 0);
 const defOf = () => STARTUPS.find(s => s.id === S.co.sid);
-const tierOpen = t => t === 1 || (t === 2 && S.exits >= 1) || (t === 3 && S.exits >= 3);
+const TIER_EXITS = { 1: 0, 2: 1, 3: 3, 4: 5 }, TIER_TAG = ['g', 'y', 'o', 'r'];
+const tierOpen = t => (S.exits || 0) >= (TIER_EXITS[t] || 0);
 let testPick = false;
 const foundMin = () => testPick || S.exits ? 0 : MIN_FOUND;
 const acqAmt = () => Math.round((8 + 4 * S.co.mkt) * (1 + 0.5 * S.exits));
@@ -469,7 +565,7 @@ function setPhase() {
 function pickerHTML() {
   return STARTUPS.map(s => {
     const open = testPick || tierOpen(s.tier), done = (S.founded || []).includes(s.id);
-    return `<div class="pick ${open ? '' : 'locked'}"><div class="pick-h"><span class="tag ${['g', 'o', 'r'][s.tier - 1]}">Tier ${s.tier}</span>${done ? '<span class="tag g">✓ exited</span>' : ''}</div><h3>${s.name}</h3><div class="lvl">${s.style}</div><p>${s.blurb}</p><div class="mix">${s.classes.map(c => `<span class="tag">${c.label} ${Math.round(c.share * 100)}%</span>`).join('')}</div><div class="foot"><span class="lvl">Goal: ${fmt(s.goal)} users</span>${open ? `<button class="btn pri" data-found="${s.id}" ${S.money < foundMin() ? 'disabled' : ''}>Found it</button>` : `<span class="tag">🔒 ${s.tier === 2 ? '1 exit' : '3 exits'}</span>`}</div></div>`;
+    return `<div class="pick ${open ? '' : 'locked'}"><div class="pick-h"><span class="tag ${TIER_TAG[s.tier - 1]}">Tier ${s.tier}</span>${done ? '<span class="tag g">✓ exited</span>' : ''}</div><h3>${s.name}</h3><div class="lvl">${s.style}</div><p>${s.blurb}</p><div class="mix">${s.classes.map(c => `<span class="tag">${c.label} ${Math.round(c.share * 100)}%</span>`).join('')}</div><div class="foot"><span class="lvl">Goal: ${fmt(s.goal)} users</span>${open ? `<button class="btn pri" data-found="${s.id}" ${S.money < foundMin() ? 'disabled' : ''}>Found it</button>` : `<span class="tag">🔒 ${TIER_EXITS[s.tier]} exit${TIER_EXITS[s.tier] > 1 ? 's' : ''}</span>`}</div></div>`;
   }).join('');
 }
 function renderPicker() { $('pickGrid').innerHTML = pickerHTML(); $('pickInfo').innerHTML = `You have <b>${money(S.money)}</b> and ${S.exits} exit${S.exits === 1 ? '' : 's'} (revenue ×${fmt(repMult())}). Founding costs everything you have.`; }
@@ -481,7 +577,7 @@ function found(id) {
   const s = STARTUPS.find(x => x.id === id); if (!s || !(testPick || tierOpen(s.tier)) || S.money < foundMin()) return;
   if (testPick) toast('🧪 Test mode: founded for free.');
   closeModal(true);
-  undoStack.length = 0; S.money = 0; S.prog = []; S.st = { bugs: 0, changes: 0 }; S.bugList = []; S.rate = 0; S.phase = 'company';
+  undoStack.length = 0; S.money = 0; S.prog = []; S.st = { bugs: 0, changes: 0, orders: 0 }; S.bugList = []; S.rate = 0; S.phase = 'company';
   S.co = { sid: id, users: 0, nodes: [{ id: 'users', type: 'users', x: 16, y: 200, lvl: 0 }], edges: [], seq: 1, free: { app: true, db: true }, credits: CREDITS, mkt: 0, ref: 0, cd: 0, offers: {}, equity: 0, done: false, rev: 0, upk: 0, churn: 0, growth: 0 };
   testPick = false; sel = null; stepView = 'startup'; setPhase(); learn('founding'); save();
   window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
@@ -534,7 +630,7 @@ function openStudy(t) { openLibrary('c:' + t); }
 
 /* ---------- library ---------- */
 const KIND_NAME = { read: 'Reads', write: 'Writes', media: 'Media downloads', upload: 'File uploads & downloads', async: 'Background jobs', realtime: 'Realtime messages', geo: 'Location data' };
-const LIB_CODE = ['statement', 'loop', 'nested', 'bugs', 'if', 'vars'], LIB_BIZ = ['founding', 'bottleneck', 'vertical', 'viral', 'debt', 'runway'];
+const LIB_CODE = ['statement', 'loop', 'nested', 'bugs', 'if', 'func', 'arrays', 'trycatch', 'vars'], LIB_BIZ = ['founding', 'bottleneck', 'vertical', 'viral', 'debt', 'runway'];
 const LIB_THINK = {
   read: 'How often is the same item read? Does it change often? Can a slightly stale copy be served?',
   write: 'Where is the single source of truth? What happens if two writes arrive at once?',
@@ -551,6 +647,7 @@ const LINKS = {
   'c:cdn': ['t:3:2', 't:10:4'], 'c:blob': ['t:9:1', 't:9:2'], 'c:queue': ['t:7:0', 't:7:1', 't:7:2'], 'c:worker': ['t:7:0', 't:7:4', 't:7:3', 't:10:2'],
   'c:ws': ['t:2:2', 't:10:1', 't:12:2'], 'c:geo': ['t:10:3', 'x:specialdb'],
   'k:read': ['t:6:0', 't:4:1', 't:5:0'], 'k:write': ['t:4:2', 't:2:3', 't:5:4'], 'k:media': ['t:3:2', 't:10:4'], 'k:upload': ['t:9:1'], 'k:async': ['t:7:0', 't:7:2'], 'k:realtime': ['t:2:2', 't:10:1'], 'k:geo': ['t:10:3'],
+  's:shortly': ['t:6:0', 't:6:1'], 's:tickit': ['t:3:0', 't:4:2'], 's:inkwell': ['t:3:2', 't:10:4'], 's:mailblast': ['t:7:0', 't:7:2'], 's:snapshelf': ['t:9:1', 't:3:2'], 's:snipbin': ['t:5:0', 't:5:2'],
   's:chirp': ['t:10:0', 't:6:1', 't:7:0'], 's:pixgram': ['t:10:0', 't:9:1', 't:3:2'], 's:drivebox': ['t:9:1', 't:5:3', 't:4:0'], 's:wavelength': ['t:10:4', 't:3:2', 'x:ai-recsys'],
   's:textr': ['t:10:1', 't:10:2', 't:7:2'], 's:guildhall': ['t:10:1', 't:2:2', 't:5:1'], 's:streamflix': ['t:10:4', 't:7:4', 't:3:2'], 's:ryde': ['t:10:3', 'x:payments', 'x:locks'],
   'x:bottleneck': ['t:1:3', 't:1:1'], 'x:vertical': ['t:3:0', 't:3:4'], 'x:founding': ['t:1:0', 't:1:1', 't:14:1'], 'x:runway': ['t:3:4'], 'x:viral': ['t:9:4'],
@@ -558,7 +655,7 @@ const LINKS = {
 };
 const DAY_OF = { 'c:users': 2, 'c:lb': 3, 'c:app': 3, 'c:db': 4, 'c:replica': 5, 'c:cache': 6, 'c:cdn': 3, 'c:blob': 9, 'c:queue': 7, 'c:worker': 7, 'c:ws': 10, 'c:geo': 10, 'k:read': 6, 'k:write': 4, 'k:async': 7, 'k:realtime': 10, 'k:media': 3, 'k:upload': 9, 'k:geo': 10, 'x:bottleneck': 1, 'x:vertical': 3, 'x:founding': 1 };
 const SCENE_T = Object.fromEntries(Object.entries(window.SCENE_NAMES || {}).map(([k, v]) => [k, v[0]]));
-const SCENES_OF = { 'c:users': ['web-request', 'capacity-math'], 'c:lb': ['lb-health', 'stateless', 'scale-journey'], 'c:app': ['stateless', 'scale-journey', 'circuit-breaker'], 'c:db': ['sharding', 'replication'], 'c:replica': ['replication'], 'c:cache': ['cache-aside', 'write-back', 'stampede'], 'c:cdn': ['cdn-flow'], 'c:queue': ['queue-flow', 'pubsub'], 'c:worker': ['queue-flow'], 'c:ws': ['chat-system', 'pubsub'], 'k:read': ['cache-aside'], 'k:write': ['idempotency'], 'k:media': ['cdn-flow'], 'k:async': ['queue-flow'], 'k:realtime': ['chat-system'], 's:chirp': ['feed-fanout'], 's:textr': ['chat-system'], 's:guildhall': ['chat-system', 'pubsub'], 's:pixgram': ['feed-fanout', 'cdn-flow'], 's:wavelength': ['cdn-flow'], 's:streamflix': ['cdn-flow', 'queue-flow'], 'x:bottleneck': ['capacity-math'], 'x:vertical': ['scale-journey'], 'x:founding': ['capacity-math', 'web-request'], 'x:runway': ['capacity-math'] };
+const SCENES_OF = { 'c:users': ['web-request', 'capacity-math'], 'c:lb': ['lb-health', 'stateless', 'scale-journey'], 'c:app': ['stateless', 'scale-journey', 'circuit-breaker'], 'c:db': ['sharding', 'replication'], 'c:replica': ['replication'], 'c:cache': ['cache-aside', 'write-back', 'stampede'], 'c:cdn': ['cdn-flow'], 'c:queue': ['queue-flow', 'pubsub'], 'c:worker': ['queue-flow'], 'c:ws': ['chat-system', 'pubsub'], 'k:read': ['cache-aside'], 'k:write': ['idempotency'], 'k:media': ['cdn-flow'], 'k:async': ['queue-flow'], 'k:realtime': ['chat-system'], 's:shortly': ['cache-aside'], 's:tickit': ['scale-journey'], 's:inkwell': ['cdn-flow'], 's:mailblast': ['queue-flow'], 's:snapshelf': ['cdn-flow'], 's:snipbin': ['replication'], 's:chirp': ['feed-fanout'], 's:textr': ['chat-system'], 's:guildhall': ['chat-system', 'pubsub'], 's:pixgram': ['feed-fanout', 'cdn-flow'], 's:wavelength': ['cdn-flow'], 's:streamflix': ['cdn-flow', 'queue-flow'], 'x:bottleneck': ['capacity-math'], 'x:vertical': ['scale-journey'], 'x:founding': ['capacity-math', 'web-request'], 'x:runway': ['capacity-math'] };
 const scenesBlock = id => EMBED && SCENES_OF[id] ? `<div class="lib-sec"><span class="cap">▶ ANIMATED LESSONS IN THE COURSE</span><div class="pacts">${SCENES_OF[id].map(s => `<button class="hbtn lbtn" data-course="s:${s}">▶ ${SCENE_T[s] || s}</button>`).join('')}</div></div>` : '';
 const lessonRef = ref => { const p = ref.split(':'); if (p[0] === 't') { const d = COURSE.days[+p[1] - 1], l = d && d.lessons[+p[2]]; return l && { ref, title: l.title, min: l.min, body: l.body, from: `Day ${d.n} · ${d.title}` }; } const x = COURSE.extra.find(e => e.id === p[1]); return x && { ref, title: x.title, min: x.min, body: x.body, from: 'Deep dive' }; };
 const md = s => s.replace(/`([^`]+)`/g, '<code>$1</code>');
@@ -610,7 +707,7 @@ function libDetail(id) {
   }
   if (kind === 's') {
     const s = STARTUPS.find(x => x.id === key);
-    return `<div class="study-card"><span class="tag ${['g', 'o', 'r'][s.tier - 1]}">Tier ${s.tier}</span><h3 style="margin-top:6px">${s.name}</h3><div class="lvl">${s.style} · goal ${fmt(s.goal)} users</div><p style="margin:8px 0">${s.blurb}</p><dl><dt>Traffic mix</dt><dd>${s.classes.map(c => `<a href="#" data-libgo="k:${c.kind}">${c.label}</a> ${Math.round(c.share * 100)}% <span class="lvl">(${KIND_NAME[c.kind].toLowerCase()})</span>`).join('<br>')}</dd><dt>Before you build</dt><dd>Estimate it first: at ${fmt(s.goal)} users and ${RPS_PER_USER} requests/s each, that is ${fmt(s.goal * RPS_PER_USER)} requests/s at the goal. Which share of that is reads, writes, files or realtime, and what is the slowest part of each path?</dd></dl></div>` + scenesBlock(id) + lessonsBlock(id);
+    return `<div class="study-card"><span class="tag ${TIER_TAG[s.tier - 1]}">Tier ${s.tier}</span><h3 style="margin-top:6px">${s.name}</h3><div class="lvl">${s.style} · goal ${fmt(s.goal)} users</div><p style="margin:8px 0">${s.blurb}</p><dl><dt>Traffic mix</dt><dd>${s.classes.map(c => `<a href="#" data-libgo="k:${c.kind}">${c.label}</a> ${Math.round(c.share * 100)}% <span class="lvl">(${KIND_NAME[c.kind].toLowerCase()})</span>`).join('<br>')}</dd><dt>Before you build</dt><dd>Estimate it first: at ${fmt(s.goal)} users and ${RPS_PER_USER} requests/s each, that is ${fmt(s.goal * RPS_PER_USER)} requests/s at the goal. Which share of that is reads, writes, files or realtime, and what is the slowest part of each path?</dd></dl></div>` + scenesBlock(id) + lessonsBlock(id);
   }
   if (kind === 'd') {
     const d = COURSE.days[+key - 1]; markRead(id);
