@@ -33,7 +33,9 @@ const KINDS = {
 };
 const KIND_NEEDS = { read: 'a Database', write: 'a Database', media: 'Blob storage', upload: 'Blob storage', async: 'a Queue → Worker', realtime: 'a Queue (or Database)', geo: 'a Geo index (or Database)' };
 const RPS_PER_USER = 0.1;
-const capOf = n => COMP[n.type].cap * Math.pow(2, n.lvl || 0);
+// the free starter App server / Database are small free-tier instances (20% capacity) until upgraded
+const FREE_CAP = 0.2;
+const capOf = n => COMP[n.type].cap * Math.pow(2, n.lvl || 0) * (n.free && !n.lvl ? FREE_CAP : 1);
 const upkOf = n => (n.free && !n.lvl) ? 0 : COMP[n.type].upk * Math.pow(2, n.lvl || 0);
 
 function simulate(co, def) {

@@ -437,3 +437,7 @@ body.in-course{overflow:hidden}
 .binfo{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:0;padding:10px 12px;border:1px solid var(--line2);border-radius:10px;background:var(--card);font-size:13px}
 .binfo dt{font-weight:700;color:var(--muted)}.binfo dd{margin:0}
 .binfo-name{display:inline-flex;min-height:34px;align-items:center;cursor:default}
+
+.credits{display:flex;align-items:center;gap:5px;min-height:38px;padding:0 12px;border:1px solid var(--ink);border-radius:11px;background:var(--blue);font-weight:800;box-shadow:var(--pop);white-space:nowrap}
+.credits small{font-weight:600;font-size:11px;color:var(--muted)}
+.credits[hidden]{display:none}

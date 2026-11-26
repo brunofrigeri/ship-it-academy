@@ -455,6 +455,7 @@ function renderTop() {
   $('money').firstChild.nodeValue = money(S.money) + ' ';
   $('rate').textContent = (S.co ? money(S.co.rev - (S.co.credits > 0 ? 0 : S.co.upk) - (S.co.loanPay || 0)) : money(S.rate)) + '/s';
   $('money').classList.toggle('neg', S.money < 0);
+  const cr = S.co ? S.co.credits || 0 : 0; $('credits').hidden = !(cr > 0); if (cr > 0) $('credAmt').textContent = money(cr);
   $('handVal').textContent = money(env().earnValue * incomeMult());
 }
 $('typeBtn').onclick = () => { const g = env().earnValue * incomeMult(); S.money += g; S.total += g; renderTop(); };
@@ -980,7 +981,7 @@ function addNode_(type, x, y) {
   }
   const n = { id: 'n' + (S.co.seq++), type, x: clampX(x - NW / 2), y: clampY(y - NH / 2), lvl: 0, free: !!free }; S.co.nodes.push(n);
   sel = { kind: 'node', id: n.id };
-  if (free) toast(`Free tier: your first ${c.name} costs $0 and has no cloud bill until you upgrade it.`);
+  if (free) toast(`Free tier: your first ${c.name} costs $0 and has no cloud bill, but it is a small instance (${fmt(capOf(n))} req/s). Upgrade it when it fills up.`);
   if (!S.learned.includes(c.concept)) learn(c.concept);
   restructure(); renderTop();
 }
@@ -1126,7 +1127,7 @@ function renderCompany() {
   const co = S.co; if (!co) return; const d = defOf(), R = SIM, P = problems();
   $('coName').textContent = d.name; $('coStyle').textContent = `${d.style} · revenue ×${fmt(repMult())}`;
   const h = R ? R.health : 1;
-  $('coStats').innerHTML = [[fmt(co.users), 'users'], [fmt(R ? R.demand : 0) + '/s', 'requests'], [Math.round(h * 100) + '%', 'served', h < 0.97 ? 'bad' : ''], [money(co.rev) + '/s', 'revenue'], [money(co.upk) + '/s', 'cloud bill'], [(co.growth - co.churn >= 0 ? '+' : '') + fmt(co.growth - co.churn) + '/s', 'user growth', co.churn > co.growth ? 'bad' : ''], ...(co.credits > 0 ? [[money(co.credits), 'cloud credits', 'cred']] : [])].map(([b, t, c]) => `<div class="stat ${c || ''}"><b>${b}</b><span>${t}</span></div>`).join('');
+  $('coStats').innerHTML = [[fmt(co.users), 'users'], [fmt(R ? R.demand : 0) + '/s', 'requests'], [Math.round(h * 100) + '%', 'served', h < 0.97 ? 'bad' : ''], [money(co.rev) + '/s', 'revenue'], [money(co.upk) + '/s', co.credits > 0 ? 'cloud bill · paid by credits' : 'cloud bill'], [(co.growth - co.churn >= 0 ? '+' : '') + fmt(co.growth - co.churn) + '/s', 'user growth', co.churn > co.growth ? 'bad' : ''], ...(co.credits > 0 ? [[money(co.credits), 'cloud credits', 'cred']] : [])].map(([b, t, c]) => `<div class="stat ${c || ''}"><b>${b}</b><span>${t}</span></div>`).join('');
   $('goalBar').style.width = Math.min(100, co.users / d.goal * 100) + '%'; $('goalTxt').textContent = `${fmt(co.users)} / ${fmt(d.goal)} users`;
   $('coMentor').innerHTML = coMentor(P);
   const pk = JSON.stringify(P.slice(0, 6).map(p => [p.t, hintLv[p.id] || 0]));
@@ -1175,8 +1176,8 @@ function renderInspector(liveOnly) {
   const n = nodeById(sel.id); if (!n) { sel = null; return renderInspector(); }
   if (n.type === 'users') { if (!liveOnly) box.innerHTML = `<h3>Users</h3><p>Everyone using ${defOf().name}. Each user sends ${RPS_PER_USER} requests/s, split by the traffic mix below.</p>`; return; }
   const c = COMP[n.type], load = SIM ? SIM.load[n.id] || 0 : 0, cap = capOf(n);
-  if (!liveOnly) box.innerHTML = `<div style="display:flex;gap:8px;align-items:center"><span class="pi nt-${n.type}">${ico(n.type, 16)}</span><h3>${nodeLabel(n)}</h3><span class="lvl">size ${n.lvl + 1}/4</span></div><p>${c.d}</p><p id="inspLive" class="lvl"></p>
-    <div class="acts" style="justify-content:flex-start"><button class="btn" id="learnN">📖 Learn</button>${n.lvl < 3 ? `<button class="btn" id="upN" ${wallet() < upCost(n) ? 'disabled' : ''}>Upgrade 2× · ${money(upCost(n))}</button>` : '<span class="tag">max size</span>'}<button class="btn" id="delN">Delete</button></div>`;
+  if (!liveOnly) box.innerHTML = `<div style="display:flex;gap:8px;align-items:center"><span class="pi nt-${n.type}">${ico(n.type, 16)}</span><h3>${nodeLabel(n)}</h3><span class="lvl">size ${n.lvl + 1}/4</span></div><p>${c.d}</p>${n.free && !n.lvl ? `<p class="lvl">🆓 Free tier: a small instance with ${fmt(capOf(n))} req/s (20% of a full one) and no cloud bill.</p>` : ''}<p id="inspLive" class="lvl"></p>
+    <div class="acts" style="justify-content:flex-start"><button class="btn" id="learnN">📖 Learn</button>${n.lvl < 3 ? `<button class="btn" id="upN" ${wallet() < upCost(n) ? 'disabled' : ''}>${n.free && !n.lvl ? 'Upgrade to a full server (10×)' : 'Upgrade 2×'} · ${money(upCost(n))}</button>` : '<span class="tag">max size</span>'}<button class="btn" id="delN">Delete</button></div>`;
   $('inspLive').textContent = `Load ${fmt(load)} / ${fmt(cap)} per s (${Math.round(load / cap * 100)}%) · bill ${money(upkOf(n))}/s`;
   if (!liveOnly) { const u = $('upN'); if (u) u.onclick = () => upgradeNode(n.id); $('delN').onclick = () => delNode(n.id); $('learnN').onclick = () => openStudy(n.type); }
 }
@@ -1193,7 +1194,9 @@ function tickCompany() {
   const auto = mktRate(), refg = SIM.health >= 0.97 ? co.users * 0.004 * co.ref : 0, churn = SIM.health < 0.97 ? co.users * (1 - SIM.health) * 0.03 : 0;
   co.users = Math.max(0, co.users + auto + refg - churn); co.growth = auto + refg; co.churn = churn;
   co.rev = (SIM.served + drained) * d.rpu * repMult(); co.upk = SIM.upkeep;
+  const hadCredits = (co.credits || 0) > 0;
   S.money += co.rev; S.total += co.rev; spendCloud(co.upk);
+  if (hadCredits && !(co.credits > 0)) { toast('☁ Cloud credits used up. The cloud bill now comes out of your cash.'); log('☁ Cloud credits are gone: from now on the cloud bill is paid from your cash.', 'y'); }
   co.loanPay = 0;
   if (co.loan) {
     const l = co.loan, pay = Math.min(l.owed, co.rev * LOAN.share); l.owed -= pay; S.money -= pay; co.loanPay = pay; l.left--;
