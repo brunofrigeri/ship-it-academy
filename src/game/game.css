@@ -441,3 +441,10 @@ body.in-course{overflow:hidden}
 .credits{display:flex;align-items:center;gap:5px;min-height:38px;padding:0 12px;border:1px solid var(--ink);border-radius:11px;background:var(--blue);font-weight:800;box-shadow:var(--pop);white-space:nowrap}
 .credits small{font-weight:600;font-size:11px;color:var(--muted)}
 .credits[hidden]{display:none}
+/* growing pains on the goal bar */
+.gbar{position:relative;overflow:visible}
+.gbar>i{border-radius:6px}
+.gmark{position:absolute;top:-3px;width:4px;height:calc(100% + 6px);margin-left:-2px;border-radius:2px;background:var(--rust);border:1px solid var(--paper,#fff)}
+.gmark.done{background:var(--green3)}
+.nd.down .bd{stroke-dasharray:5 4;opacity:.55}
+.nd.down .ns{fill:var(--bad,#e5484d);font-weight:800}

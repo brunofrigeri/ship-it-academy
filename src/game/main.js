@@ -2,7 +2,7 @@
 import '../shared/support.css';
 import './game.css';
 import { runTick, runChallenge, CHALLENGES, countBlocks, mulberry32, KIDS, COST } from './engine.js';
-import { simulate, STARTUPS, COMP, PALETTE, ALLOWED, KINDS, KIND_NEEDS, RPS_PER_USER, capOf, upkOf } from './sim.js';
+import { classesOf, simulate, STARTUPS, COMP, PALETTE, ALLOWED, KINDS, KIND_NEEDS, RPS_PER_USER, capOf, upkOf } from './sim.js';
 import { COURSE } from './course-data.js';
 import { SITE } from '../site.config.js';
 import { coffeeButton, coffeeNote } from '../shared/support.js';
@@ -618,7 +618,8 @@ function setPhase() {
   $('codeArea').hidden = p !== 'code'; $('codeDone').hidden = p !== 'done'; $('company').hidden = p !== 'company'; $('picker').hidden = p !== 'pick';
   renderSteps(); if (p === 'done') renderCodeDone();
   if (p === 'pick') renderPicker();
-  if (p === 'company') { SIM = simulate(S.co, defOf()); setPane(pane); buildCanvas(); coKey = ''; $('coStudy').dataset.k = ''; $('coProblems').dataset.k = ''; renderCompany(); }
+  if (p === 'company') { const ue = S.co.edges.filter(e => e.a === 'users'); if (ue.length > 1) { const keep = ue.find(e => (nodeById(e.b) || {}).type === 'lb') || ue[0]; S.co.edges = S.co.edges.filter(e => e.a !== 'users' || e === keep); setTimeout(() => toast('New rule: users reach your system through one entry point. Put a Load balancer in front of your servers.'), 600); } if (S.co.ev) { S.co.ev = null; S.co.spike = 1; S.co.nodes.forEach(n => { n.down = false; }); S.co.evs = Object.fromEntries(Object.entries(S.co.evs || {}).filter(([, v]) => v === 'done')); }
+    SIM = simulate(S.co, defOf()); setPane(pane); buildCanvas(); coKey = ''; $('coStudy').dataset.k = ''; $('coProblems').dataset.k = ''; renderCompany(); }
 }
 
 /* picker */
@@ -889,10 +890,12 @@ function liveNodes() {
     if (n.type === 'users') { s.textContent = `${cf(S.co.users)} · ${cf(SIM ? SIM.demand : 0)} req/s`; return; }
     const load = SIM ? SIM.load[n.id] || 0 : 0, cap = capOf(n), pct = load / cap, th = SIM ? SIM.thru[n.id] || 0 : 0, lv = n.lvl ? ' · L' + (n.lvl + 1) : '';
     let txt = `${cf(th)}/s · ${pctTxt(pct)}${lv}`;
-    if (n.type === 'replica' && SIM && !SIM.fed.has(n.id)) txt = 'no primary!';
+    if (n.down) txt = '💥 DOWN';
+    else if (n.type === 'replica' && SIM && !SIM.fed.has(n.id)) txt = 'no primary!';
     else if ((n.type === 'cdn' || n.type === 'cache') && th > 0) txt = `${cf(th)}/s · ${cf(SIM.hitN[n.id])} hit`;
     else if (n.type === 'queue') txt = (S.co.backlog || 0) >= 1 ? `${cf(th)}/s · ${cf(S.co.backlog)} wait` : `${cf(th)}/s · empty`;
     s.textContent = txt;
+    if (g) g.classList.toggle('down', !!n.down);
     if (l) { l.setAttribute('width', Math.min(1, pct) * (NW - 20)); l.classList.toggle('hot', pct > 1); l.classList.toggle('warm', pct > 0.8 && pct <= 1); }
     if (g) g.classList.toggle('over', pct > 1 && n.type !== 'worker' || (n.type === 'queue' && (S.co.qdelay || 0) > 120));
   });
@@ -964,6 +967,10 @@ function connect_(a, b) {
   const A = nodeById(a), B = nodeById(b);
   if (!ALLOWED[A.type].includes(B.type)) { const ok = ALLOWED[A.type].map(t => COMP[t].name); toast(`${COMP[A.type].name} can't send requests to ${COMP[B.type].name}. ${ok.length ? 'It can connect to: ' + ok.join(', ') + '.' : 'It is an endpoint.'}`); return false; }
   if (S.co.edges.some(e => e.a === a && e.b === b)) return false;
+  if (A.type === 'users') {
+    const old = S.co.edges.find(e => e.a === 'users');
+    if (old) { S.co.edges = S.co.edges.filter(e => e !== old); toast(`Users reach your system through one address, so they now go to ${nodeLabel(B)} instead of ${nodeLabel(nodeById(old.b))}. To use several servers, put a Load balancer in front of them.`); }
+  }
   S.co.edges.push({ id: 'e' + (S.co.seq++), a, b });
   if (A.type === 'db' && B.type === 'replica') toast('Replication: the database now copies its data to this replica.');
   restructure();
@@ -1087,14 +1094,15 @@ function problems() {
   if (S.money < 0) P('bad', 'bankrupt', `Bankrupt in ${LOAN.grace - (co.neg || 0)} s (balance ${money(S.money)})`, 'Your cash is below $0.', 'Delete idle components (50% refund), take a loan, or accept an investor.', null, 'x:runway');
   else if (co.upk + (co.loanPay || 0) > co.rev && S.money < (co.upk - co.rev) * 30) P('bad', 'runway', `Runway: about ${Math.max(0, Math.floor(S.money / Math.max(0.01, co.upk + (co.loanPay || 0) - co.rev)))} s of cash left`, 'Your cloud bill is bigger than your revenue.', 'Cut components you do not need, grow users, or raise money.', null, 'x:runway');
   if (co.loan && co.loan.left <= 60) P('warn', 'loan', `Loan due in ${co.loan.left} s: ${money(co.loan.owed)} left`, 'Whatever is unpaid when the timer ends is taken all at once.', 'Repay early if you can.', null, 'x:debt');
+  if (co.ev) { const ev = INCIDENTS.find(e => e.id === co.ev.id); if (ev) P(ev.kind === 'crash' ? 'bad' : 'warn', 'ev-' + ev.id, ev.kind === 'crash' ? `${nodeLabel(nodeById(co.ev.node) || { type: 'app' })} is down (${co.ev.left} s left)` : `Traffic spike: ${ev.mult}× for ${co.ev.left} more s`, ev.kind === 'crash' ? 'Requests sent to a dead server fail. Only a Load balancer can route around it.' : 'Every component gets the extra load at once. Anything that was busy before will overflow.', ev.hint, null, ev.lib); }
   if (!co.edges.some(e => e.a === 'users')) P('bad', 'entry', 'Users can\'t reach anything', 'Every request starts at Users, but nothing receives it yet.', 'What is the first thing a web request hits on your side: something that runs code, or something that spreads traffic?', 'Drag from the ● on Users onto an App server (or a Load balancer).', 'c:users');
   R.cls.forEach(c => { if (c.demand > 0 && c.failed / c.demand > 0.05) P('bad', 'route-' + c.label, `${c.label}: no route`, `These requests travel through your diagram but never reach anything that can ${KIND_GOAL[c.kind]}.`, KIND_NUDGE[c.kind], `They need ${KIND_NEEDS[c.kind]} reachable from Users.`, 'k:' + c.kind); });
   if ((co.backlog || 0) >= 1) { const dl = co.qdelay || 0; P(dl > 120 ? 'bad' : 'warn', 'backlog', dl > 120 ? `Jobs wait ${cf(dl)} s in the Queue` : `Queue backlog: ${cf(co.backlog)} jobs (${cf(dl)} s delay)`, 'Jobs arrive faster than they are processed, so they wait in line. Past 2 minutes, users notice.', 'Who does the work after the queue? Is there enough of it?', 'Add Workers (connected to the Queue) or upgrade them.', 'c:queue'); }
   co.nodes.forEach(n => { if (n.type !== 'users' && n.type !== 'worker' && R.ratio[n.id] < 0.99) P('bad', 'over-' + n.id, `${nodeLabel(n)} overloaded (${Math.round(R.load[n.id] / capOf(n) * 100)}%)`, `It receives more work per second than its ${fmt(capOf(n))}/s capacity, so the extra requests are dropped.`, OVER_NUDGE[n.type] || 'Bigger, or more of them?', overHint(n, R), 'c:' + n.type); });
   co.nodes.forEach(n => { if (n.type === 'replica' && !R.fed.has(n.id)) P('warn', 'rep-' + n.id, `${nodeLabel(n)} is empty`, 'A replica is a copy of a database, but nothing is copying data into it.', 'Where does a replica get its data from?', 'Draw Database → Replica.', 'c:replica'); });
   R.cls.forEach(c => {
-    if (c.kind === 'media' && c.heavy.app) P('warn', 'heavy-m' + c.label, `${c.label} go through your app servers (6× load)`, 'Big files flow through machines meant for logic. Each one costs as much as six normal requests.', 'Is there a component that serves static files close to users, so they never reach your servers?', 'Users → CDN → Blob storage.', 'c:cdn');
-    if (c.kind === 'realtime' && c.heavy.db) P('warn', 'heavy-r' + c.label, `${c.label} poll the database (4× load)`, 'Without a persistent connection, every client keeps asking "anything new?", and each question hits the database.', 'What keeps a connection open so the server can push messages instead?', 'Users → WebSocket gateway → Queue.', 'c:ws');
+    if (c.kind === 'media' && c.heavy.app) P('warn', 'heavy-m' + c.label, `${c.label} go through your app servers (6× load)`, 'Big files flow through machines meant for logic. Each one costs as much as six normal requests.', 'Is there a component that serves static files close to users, so they never reach your servers?', 'Put a CDN at the entry: Users → CDN → Load balancer, and CDN → Blob storage for the files.', 'c:cdn');
+    if (c.kind === 'realtime' && c.heavy.db) P('warn', 'heavy-r' + c.label, `${c.label} poll the database (4× load)`, 'Without a persistent connection, every client keeps asking "anything new?", and each question hits the database.', 'What keeps a connection open so the server can push messages instead?', 'Users → Load balancer → WebSocket gateway → Queue.', 'c:ws');
     if (c.kind === 'geo' && c.heavy.db) P('warn', 'heavy-g' + c.label, `${c.label} hammer the database (5× load)`, 'A general-purpose database is slow at "nearby" queries and constant location writes.', 'Is there a store specialized in locations?', 'Add a Geo index behind your App servers.', 'c:geo');
   });
   if (L.some(p => p.id.startsWith('over-')) && !S.learned.includes('bottleneck')) setTimeout(() => learn('bottleneck'), 50);
@@ -1110,7 +1118,9 @@ function coMentor(P) {
   if (!co.edges.some(e => e.a === 'users')) return `Welcome to <b>${d.name}</b>! Your users need a path through your system to whatever can answer them. Click a component on the left to study it, drag it onto the canvas to add it. You have <b>$2,000 in cloud credits</b> to spend. Stuck? Problems has hints.`;
   if (co.users < 10 && !P.some(p => p.k === 'bad')) return 'The diagram is live. Now get people in: press <b>Acquire users</b> and watch the packets flow.';
   if (P.length) return `<b>${esc(P[0].t)}.</b> ${esc(P[0].why)}`;
+  if (co.users >= defOf().goal && !co.done) { const n = eventsLeft(); if (n) return `You reached the user goal, but <b>${n} growing pain${n > 1 ? 's are' : ' is'}</b> still ahead. Buyers want a system that has survived real traffic.`; }
   if (co.done) return `You hit the goal! Exit for <b>${money(valuation())}</b> to unlock harder startups, or keep growing.`;
+  { const nx = eventList().find(e => !(co.evs || {})[e.id]); if (nx) return `Healthy! Grow with marketing and referrals. Next challenge at <b>${fmt(nx.at * defOf().goal)} users</b>: be ready.`; }
   return 'Healthy! Grow with marketing and referrals. Every new user adds traffic, so the next bottleneck is coming.';
 }
 
@@ -1129,6 +1139,8 @@ function renderCompany() {
   const h = R ? R.health : 1;
   $('coStats').innerHTML = [[fmt(co.users), 'users'], [fmt(R ? R.demand : 0) + '/s', 'requests'], [Math.round(h * 100) + '%', 'served', h < 0.97 ? 'bad' : ''], [money(co.rev) + '/s', 'revenue'], [money(co.upk) + '/s', co.credits > 0 ? 'cloud bill · paid by credits' : 'cloud bill'], [(co.growth - co.churn >= 0 ? '+' : '') + fmt(co.growth - co.churn) + '/s', 'user growth', co.churn > co.growth ? 'bad' : ''], ...(co.credits > 0 ? [[money(co.credits), 'cloud credits', 'cred']] : [])].map(([b, t, c]) => `<div class="stat ${c || ''}"><b>${b}</b><span>${t}</span></div>`).join('');
   $('goalBar').style.width = Math.min(100, co.users / d.goal * 100) + '%'; $('goalTxt').textContent = `${fmt(co.users)} / ${fmt(d.goal)} users`;
+  { const evs = eventList(), mk = JSON.stringify([d.id, co.evs]); const bar = $('goalBar').parentElement; if (bar.dataset.k !== mk) { bar.dataset.k = mk; bar.querySelectorAll('.gmark').forEach(x => x.remove()); evs.forEach(e => { const m = document.createElement('span'); m.className = 'gmark' + ((co.evs || {})[e.id] === 'done' ? ' done' : ''); m.style.left = e.at * 100 + '%'; m.title = `${fmt(e.at * d.goal)} users: ${e.kind === 'feature' ? 'new feature' : 'incident'}`; bar.appendChild(m); }); }
+    const left = eventsLeft(); $('goalLeft').textContent = left ? `${evs.length - left}/${evs.length} growing pains survived` : `✓ all ${evs.length} growing pains survived`; }
   $('coMentor').innerHTML = coMentor(P);
   const pk = JSON.stringify(P.slice(0, 6).map(p => [p.t, hintLv[p.id] || 0]));
   if ($('coProblems').dataset.k !== pk) { $('coProblems').dataset.k = pk; $('coProblems').innerHTML = P.length ? P.slice(0, 6).map(probHTML).join('') : '<div class="nobug">✓ No problems. Every request is served.</div>'; }
@@ -1181,6 +1193,45 @@ function renderInspector(liveOnly) {
   $('inspLive').textContent = `Load ${fmt(load)} / ${fmt(cap)} per s (${Math.round(load / cap * 100)}%) · bill ${money(upkOf(n))}/s`;
   if (!liveOnly) { const u = $('upN'); if (u) u.onclick = () => upgradeNode(n.id); $('delN').onclick = () => delNode(n.id); $('learnN').onclick = () => openStudy(n.type); }
 }
+/* ---------- scaling events: problems that appear as the company grows ---------- */
+// generic incidents for every startup + the startup's own feature launches; at = share of the user goal
+const INCIDENTS = [
+  { id: 'spike', at: 0.2, kind: 'spike', mult: 3, dur: 45, title: 'You hit the front page of Hacker News', text: 'For the next 45 seconds traffic is <b>3× higher</b>. Systems that run near 100% fall over during spikes; healthy ones keep spare capacity (headroom). Users you fail to serve now will leave.', hint: 'Keep every component well below 100% load: upgrade or add servers behind a Load balancer before the spike ends.', lib: 'x:bottleneck' },
+  { id: 'crash', at: 0.5, kind: 'crash', dur: 40, title: 'An app server crashed', text: 'Hardware fails. Your busiest App server is <b>down for 40 seconds</b>. If it was your only one, nothing works. A Load balancer with two or more App servers notices the dead one (health checks) and sends traffic to the others.', hint: 'Users → Load balancer → at least 2 App servers. Then one crash only costs capacity, not the whole site.', lib: 'c:lb' },
+  { id: 'spike2', at: 0.8, kind: 'spike', mult: 2.5, dur: 60, title: 'Launch on Product Hunt', text: 'A second, longer wave: traffic is <b>2.5× higher for 60 seconds</b>. Caches, CDNs and queues absorb spikes far more cheaply than extra servers.', hint: 'Look at what is above 40% load right now: at 2.5× it will overflow.', lib: 'x:bottleneck' },
+];
+function eventList() {
+  const d = defOf();
+  return INCIDENTS.concat((d.features || []).map(f => ({ ...f, kind: 'feature', hint: `They need ${KIND_NEEDS[f.kind]} reachable from Users. Check the Traffic mix panel.`, lib: 'k:' + f.kind }))).sort((a, b) => a.at - b.at);
+}
+function startEvent(ev) {
+  const co = S.co; co.evs = co.evs || {}; co.evs[ev.id] = 'on';
+  if (ev.kind === 'spike') { co.ev = { id: ev.id, left: ev.dur }; co.spike = ev.mult; }
+  if (ev.kind === 'crash') {
+    const apps = co.nodes.filter(n => n.type === 'app'); const n = apps.sort((a, b) => (SIM && SIM.load[b.id] || 0) - (SIM && SIM.load[a.id] || 0))[0];
+    if (n) { n.down = true; co.ev = { id: ev.id, left: ev.dur, node: n.id }; } else co.evs[ev.id] = 'done';
+  }
+  if (ev.kind === 'feature') { co.launched = [...new Set([...(co.launched || []), ev.id])]; co.evs[ev.id] = 'done'; }
+  coKey = ''; restructure();
+}
+function endEvent() {
+  const co = S.co, ev = co.ev; if (!ev) return;
+  if (ev.node) { const n = nodeById(ev.node); if (n) n.down = false; }
+  co.evs[ev.id] = 'done'; co.spike = 1; co.ev = null;
+  const lost = co.evLost || 0; co.evLost = 0;
+  toast(lost > 1 ? `✓ Incident over. You lost ${fmt(lost)} users during it.` : '✓ Incident over, and nobody noticed. Great architecture!');
+  coKey = ''; restructure();
+}
+function eventTick() {
+  const co = S.co, d = defOf(); co.evs = co.evs || {};
+  if (co.ev) { co.ev.left--; if (co.ev.left <= 0) endEvent(); return; }
+  if (co.evWait || $('modal').classList.contains('on')) return;
+  const next = eventList().find(e => !co.evs[e.id] && co.users >= e.at * d.goal); if (!next) return;
+  co.evWait = true;
+  modal(`<span class="cap">${next.kind === 'feature' ? 'GROWING · NEW FEATURE' : 'GROWING · INCIDENT'}</span><h2>${next.title}</h2><p>${next.text}</p>${next.kind === 'feature' ? `<p>New traffic: <b>${esc(next.label)}</b> (${KIND_NAME[next.kind]}), about ${Math.round(next.share * 100)}% of requests from now on.</p>` : ''}<p class="lvl">💡 ${esc(next.hint)}</p>`,
+    [{ label: '📖 Study first', fn: () => { co.evWait = false; startEvent(next); openLibrary(next.lib); } }, { label: next.kind === 'feature' ? 'Ship it' : 'Bring it on', cls: 'pri', fn: () => { co.evWait = false; startEvent(next); } }]);
+}
+const eventsLeft = () => { const co = S.co; return eventList().filter(e => !(co.evs || {})[e.id] || co.evs[e.id] === 'on').length; };
 function tickCompany() {
   const co = S.co; if (!co) return; const d = defOf();
   SIM = simulate(co, d); const h = SIM.health;
@@ -1191,7 +1242,8 @@ function tickCompany() {
   const asyncRate = SIM.cls.filter(c => c.kind === 'async').reduce((s, c) => s + c.served, 0) + drained;
   co.qdelay = co.backlog > 1 ? co.backlog / Math.max(0.01, asyncRate) : 0;
   if (SIM.demand > 0) { const accepted = co.qdelay <= 120 ? SIM.queued - overflow : 0; SIM.health = Math.min(1, (SIM.served + accepted) / SIM.demand); }
-  const auto = mktRate(), refg = SIM.health >= 0.97 ? co.users * 0.004 * co.ref : 0, churn = SIM.health < 0.97 ? co.users * (1 - SIM.health) * 0.03 : 0;
+  const auto = mktRate(), refg = SIM.health >= 0.97 ? co.users * 0.004 * co.ref : 0, churn = SIM.health < 0.97 ? co.users * (1 - SIM.health) * (co.ev ? 0.01 : 0.03) : 0;
+  if (co.ev) co.evLost = (co.evLost || 0) + churn;
   co.users = Math.max(0, co.users + auto + refg - churn); co.growth = auto + refg; co.churn = churn;
   co.rev = (SIM.served + drained) * d.rpu * repMult(); co.upk = SIM.upkeep;
   const hadCredits = (co.credits || 0) > 0;
@@ -1205,7 +1257,8 @@ function tickCompany() {
   }
   if (S.money < 0) { co.neg = (co.neg || 0) + 1; if (co.neg === 1) { toast(`⚠ You're below $0! Bankrupt in ${LOAN.grace}s unless you fix it.`); if (!S.learned.includes('runway')) learn('runway'); } if (co.neg >= LOAN.grace) { bankrupt(); return; } } else co.neg = 0;
   OFFERS.forEach(o => { if (!co.offers[o.id] && co.users >= o.at) { co.offers[o.id] = 'open'; toast(`💰 ${o.name} wants to invest!`); } });
-  if (!co.done && co.users >= d.goal && SIM.health >= 0.95) { co.done = true; modal(`<span class="cap">GOAL REACHED</span><h2>${fmt(d.goal)} users on ${d.name}</h2><p>Your architecture holds. You can exit now for <b>${money(valuation())}</b> (permanent ×1.5 revenue on future startups, and harder startups unlock), or keep growing to raise the price.</p>`, [{ label: 'Keep growing' }, { label: 'Exit now', cls: 'pri', fn: exitCo }]); }
+  eventTick();
+  if (!co.done && co.users >= d.goal && SIM.health >= 0.95 && !co.ev && eventsLeft() === 0) { co.done = true; modal(`<span class="cap">GOAL REACHED</span><h2>${fmt(d.goal)} users on ${d.name}</h2><p>Your architecture holds. You can exit now for <b>${money(valuation())}</b> (permanent ×1.5 revenue on future startups, and harder startups unlock), or keep growing to raise the price.</p>`, [{ label: 'Keep growing' }, { label: 'Exit now', cls: 'pri', fn: exitCo }]); }
   drawEdges(); liveNodes(); renderCompany(); renderTop();
 }
 function exitCo() {
