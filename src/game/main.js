@@ -66,7 +66,7 @@ const money = n => '$' + fmt(n);
 /* ---------- concepts ---------- */
 const CONCEPTS = {
   statement: { t: 'Statements', d: 'A program is a list of statements that run top to bottom. Every statement costs CPU time: here, ops. Your CPU can only do so many ops per tick.', c: 'earn(); // runs once\nearn(); // runs again' },
-  loop: { t: 'Loops', d: 'A loop runs its body many times. Same work, far fewer lines. Memory limits how many blocks you can write; your bits limit how many times a loop can repeat (max repeats = bits). Buy more bits to loop more.', c: 'for (let i = 0; i < 5; i++) {\n  earn();\n}' },
+  loop: { t: 'Loops', d: 'A loop runs its body many times. Same work, far fewer lines. Memory limits how many blocks you can write. The loop counter `i` is stored in bits: with b bits it can count up to 2^b − 1 (2 bits → 3, 3 bits → 7, 4 bits → 15). Every loop has its own counter, so the limit is per loop, and loops inside loops multiply. Each bit you buy doubles the limit. The CPU (ops per tick) is the other limit: a loop stops when the ops run out.', c: '// 4-bit counter: 1111 in binary = 8 + 4 + 2 + 1 = 15\nfor (let i = 0; i < 15; i++) {\n  earn();\n}' },
   nested: { t: 'Nested loops', d: 'Loops multiply: an outer loop of 5 around an inner loop of 5 runs the body 25 times. This is exactly how O(n²) algorithms appear in real code, which is great for earning and terrible for performance.', c: 'for (let i = 0; i < 5; i++)\n  for (let j = 0; j < 5; j++)\n    earn(); // 25 times' },
   bugs: { t: 'Bugs', d: 'Every earn() and commit() can introduce a real defect, like `TypeError: cart.total is undefined`. While any bug is open, earn() pays $0 and deploy() rolls back. fix() patches the oldest open bug for 4 ops; running it when nothing is broken wastes them.', c: 'earn();  // may throw: cart.total is undefined\nfix();   // patches the oldest bug (4 ops)' },
   if: { t: 'Conditionals', d: 'if/else lets the program react to state. Only pay for fix() when there actually is a bug. Checking a condition is cheap (1 op); doing unnecessary work is expensive.', c: 'if (bugs > 0) {\n  fix();\n} else {\n  earn();\n}' },
@@ -109,9 +109,11 @@ function load() {
 }
 
 /* ---------- economy ---------- */
-const env = () => ({ cpu: 6 + S.lv.cpu * 4, earnValue: 1 + S.lv.earn, bugChance: S.bugsOn ? 0.08 * Math.pow(0.8, S.lv.lint) : 0, deployValue: (1 + S.lv.earn) * 0.03 * Math.pow(2, S.lv.ci), maxLoop: bits(), orderRate: S.unl.each ? 2 + S.lv.cust : 0, orderValue: (1 + S.lv.earn) * 5, maxChanges: maxChanges() });
+const env = () => ({ cpu: 6 + S.lv.cpu * 4, earnValue: 1 + S.lv.earn, bugChance: S.bugsOn ? 0.08 * Math.pow(0.8, S.lv.lint) : 0, deployValue: (1 + S.lv.earn) * 0.03 * Math.pow(2, S.lv.ci), maxLoop: maxRep(), orderRate: S.unl.each ? 2 + S.lv.cust : 0, orderValue: (1 + S.lv.earn) * 5, maxChanges: maxChanges() });
 const maxChanges = () => 1000 + 1000 * (S.lv.ci || 0);
-const bits = () => 3 + S.lv.bits;
+// a loop counter with b bits can count up to 2^b - 1; every loop has its own counter
+const bits = () => 2 + Math.min(S.lv.bits, 10);
+const maxRep = () => Math.pow(2, bits()) - 1;
 const memMax = () => 3 + S.lv.mem;
 const tps = () => 1 + S.lv.clock * 0.5;
 const incomeMult = () => S.mult;
@@ -119,7 +121,7 @@ const UPG = [
   { id: 'earn', name: 'Faster typing', d: 'earn() and hand-typing pay +$1 more (ship() pays 5×).', base: 10, g: 1.75, show: () => true },
   { id: 'cpu', name: 'Better CPU', d: '+4 ops per tick. Lets longer programs finish.', base: 20, g: 1.9, show: () => true },
   { id: 'mem', name: 'More RAM', d: '+1 block of memory for your program.', base: 30, g: 2.4, max: 12, show: () => true },
-  { id: 'bits', name: 'Buy a bit', d: 'Max repeats = your bits. Each bit lets repeat() loop one more time.', base: 12, g: 1.45, max: 60, show: () => S.unl.repeat },
+  { id: 'bits', name: 'Buy a bit', d: 'Each loop counter gets 1 more bit, which doubles how far it can count (max repeats per loop).', base: 15, g: 4, max: 10, show: () => S.unl.repeat },
   { id: 'clock', name: 'Overclock', d: '+0.5 ticks per second.', base: 500, g: 3, max: 6, show: () => S.total > 300 },
   { id: 'lint', name: 'Linter', d: 'Bugs appear 20% less often.', base: 400, g: 2.6, max: 8, show: () => S.bugsOn },
   { id: 'cust', name: 'More customers', d: '+1 order arrives every tick.', base: 60000, g: 1.8, max: 30, show: () => S.unl.each },
@@ -180,7 +182,7 @@ function blockFacts(t) {
   const pay = v => `${money(v * m)}${m !== 1 ? ` <span class="lvl">(${money(v)} × ${fmt(m)} income bonus)</span>` : ''}`;
   const F = {
     earn: [['Pays', pay(e.earnValue) + ' per run'], ['Bug risk', bug], ['Blocked when', 'any bug is open (pays $0)']],
-    repeat: [['Runs inside', `n times, up to ${bits()} (your bits)`], ['Pays', 'nothing itself: it multiplies what is inside']],
+    repeat: [['Runs inside', `n times, up to ${fmt(maxRep())} (${bits()}-bit counter: 2<sup>${bits()}</sup> − 1)`], ['Nested loops', `each loop has its own counter, so 2 loops of ${fmt(maxRep())} run the inside ${fmt(maxRep() * maxRep())} times (if the CPU allows)`], ['Pays', 'nothing itself: it multiplies what is inside']],
     fix: [['Does', 'closes the oldest open bug'], ['Wasted when', 'no bug is open (you still pay 4 ops)'], ['Open bugs now', String(S.st.bugs)]],
     if: [['Does', 'runs one side: the top box when true, the else box when false'], ['Conditions', ['bugs > 0', 'bugs == 0'].concat(S.unl.each ? ['orders.length > 0'] : [], S.unl.commit ? ['changes >= k'] : []).join(' · ')]],
     func: [['Does', 'nothing on its own: its blocks run when helper() is called'], ['Limit', 'one helper per program']],
@@ -217,7 +219,7 @@ function Editor(host, opts) {
   function blockHTML(n) {
     const d = BDEF[n.t]; const runs = `<span class="runs" data-r="${n.id}">×0</span>`;
     const ctl = `<span class="ctl">${opts.info ? `<button data-a="info" data-t="${n.t}" aria-label="About this block" title="What does this block do?">ⓘ</button>` : ''}<button data-a="up" data-id="${n.id}" aria-label="Move up">↑</button><button data-a="down" data-id="${n.id}" aria-label="Move down">↓</button><button data-a="del" data-id="${n.id}" aria-label="Delete">✕</button></span>`;
-    if (n.t === 'repeat') { const mx = opts.maxLoop ? opts.maxLoop() : 99; return `<div class="blk ${d.k}" data-b="${n.id}"><div class="bh"><span class="kw">repeat</span>(<input type="number" min="1" max="99" value="${n.n}" data-f="n" data-id="${n.id}" aria-label="Iterations">) {${runs}${n.n > mx ? `<span class="tag r" title="Max repeats = your bits">capped at ${mx}: ${opts.maxLoop === bits ? 'buy bits' : 'challenge limit'}</span>` : ''}${ctl}</div>${slotHTML(n.id, 'body', n.body)}<div class="kw">}</div></div>`; }
+    if (n.t === 'repeat') { const mx = opts.maxLoop ? opts.maxLoop() : 99; return `<div class="blk ${d.k}" data-b="${n.id}"><div class="bh"><span class="kw">repeat</span>(<input type="number" min="1" max="9999" value="${n.n}" data-f="n" data-id="${n.id}" aria-label="Iterations">) {${runs}${n.n > mx ? `<span class="tag r" title="Max repeats per loop">runs ${mx}× (max): ${opts.maxLoop === maxRep ? 'buy a bit to double it' : 'challenge limit'}</span>` : ''}${ctl}</div>${slotHTML(n.id, 'body', n.body)}<div class="kw">}</div></div>`; }
     if (n.t === 'if') {
       const conds = opts.conds().map(c => `<option value="${c}" ${n.cond === c ? 'selected' : ''}>${condLabel[c]}</option>`).join('');
       const k = n.cond === 'changes' ? `<input type="number" min="1" max="999" value="${n.k}" data-f="k" data-id="${n.id}" aria-label="Threshold">` : '';
@@ -263,7 +265,7 @@ function Editor(host, opts) {
   });
   host.addEventListener('change', e => {
     const f = e.target.dataset.f; if (!f) return; const n = findNode(opts.get(), e.target.dataset.id); if (!n) return;
-    if (f === 'n') n.n = Math.max(1, Math.min(99, parseInt(e.target.value) || 1));
+    if (f === 'n') n.n = Math.max(1, Math.min(9999, parseInt(e.target.value) || 1));
     if (f === 'k') n.k = Math.max(1, Math.min(999, parseInt(e.target.value) || 1));
     if (f === 'cond') n.cond = e.target.value;
     opts.changed(); ed.render();
@@ -375,7 +377,7 @@ function learn(k) {
 
 /* ---------- main editor ---------- */
 const mainEd = Editor($('editor'), {
-  get: () => S.prog, palette: $('palette'), max: memMax, maxLoop: bits, info: true,
+  get: () => S.prog, palette: $('palette'), max: memMax, maxLoop: maxRep, info: true,
   allowed: t => { const nx = UNL.find(u => !S.unl[u.id] && u.show()); const peek = id => S.unl[id] ? true : nx && nx.id === id ? false : 'hide'; return ({ earn: true, repeat: S.unl.repeat, fix: S.bugsOn ? true : 'hide', if: S.bugsOn ? S.unl.if : 'hide', func: peek('func'), call: S.unl.func ? true : 'hide', each: peek('each'), ship: S.unl.each ? true : 'hide', try: peek('try'), commit: peek('commit'), deploy: S.unl.commit ? true : 'hide' })[t]; },
   conds: () => ['bug', 'nobug'].concat(S.unl.each ? ['orders'] : [], S.unl.commit ? ['changes'] : []),
   changed: () => { save(); }, full: () => toast('Out of memory! Buy more RAM or use a loop.'),
@@ -387,9 +389,9 @@ function updateMeters() {
   const e = env(), used = countBlocks(S.prog);
   $('cpuTxt').textContent = `${lastRun.ops} / ${e.cpu}`; $('cpuBar').style.width = Math.min(100, lastRun.ops / e.cpu * 100) + '%'; $('cpuBar').classList.toggle('warn', lastRun.halted);
   $('memTxt').textContent = `${used} / ${memMax()}`; $('memBar').style.width = Math.min(100, used / memMax() * 100) + '%'; $('memBar').classList.toggle('warn', used >= memMax());
-  $('memLbl').textContent = `${used}/${memMax()} blocks · ${bits()} bits`;
-  $('bitTxt').textContent = `${bits()} bits = repeat up to ${bits()}×`;
-  if ($('bitRow').childElementCount !== bits()) $('bitRow').innerHTML = Array.from({ length: bits() }, (_, i) => `<i title="bit ${i + 1}">1</i>`).join('');
+  $('memLbl').textContent = `${used}/${memMax()} blocks · loops up to ${fmt(maxRep())}×`;
+  $('bitTxt').textContent = `${bits()} bits → each loop counts to ${fmt(maxRep())}`;
+  if ($('bitRow').dataset.b !== String(bits())) { $('bitRow').dataset.b = bits(); $('bitRow').innerHTML = Array.from({ length: bits() }, (_, i) => `<i title="bit ${bits() - i}: worth ${Math.pow(2, bits() - i - 1)}">1</i>`).join('') + `<span class="bitsum">= ${Array.from({ length: bits() }, (_, i) => Math.pow(2, bits() - i - 1)).join(' + ')} = ${fmt(maxRep())}</span>`; }
   $('tickLbl').textContent = `${tps()} ticks/s · ×${fmt(incomeMult())} income`;
 }
 function mentor() {

@@ -461,3 +461,6 @@ body.in-course{overflow:hidden}
 .cl-sk i:first-child{height:120px}
 @keyframes clsh{from{background-position:100% 0}to{background-position:-100% 0}}
 @media (prefers-reduced-motion:reduce){.cl-spin,.cl-sk i{animation:none}}
+
+.bits{align-items:center;flex-wrap:wrap}
+.bitsum{font-size:11px;font-weight:700;color:var(--muted);margin-left:6px;font-family:ui-monospace,monospace}
