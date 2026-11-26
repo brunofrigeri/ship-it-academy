@@ -448,3 +448,16 @@ body.in-course{overflow:hidden}
 .gmark.done{background:var(--green3)}
 .nd.down .bd{stroke-dasharray:5 4;opacity:.55}
 .nd.down .ns{fill:var(--bad,#e5484d);font-weight:800}
+
+/* course loading: only the content area, the game header stays */
+.courseload{position:fixed;left:0;right:0;bottom:0;z-index:150;background:var(--paper);display:grid;align-content:start;justify-items:center;gap:18px;padding:40px 16px}
+.courseload[hidden]{display:none}
+.cl-card{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center}
+.cl-card .lvl{width:100%;text-align:center}
+.cl-spin{width:22px;height:22px;border-radius:50%;border:3px solid var(--line2);border-top-color:var(--vink,#5a3ee6);animation:clspin .8s linear infinite}
+@keyframes clspin{to{transform:rotate(360deg)}}
+.cl-sk{display:grid;gap:12px;width:min(900px,100%)}
+.cl-sk i{display:block;height:64px;border-radius:14px;background:linear-gradient(90deg,var(--card) 0%,var(--field) 50%,var(--card) 100%);background-size:200% 100%;animation:clsh 1.2s ease-in-out infinite}
+.cl-sk i:first-child{height:120px}
+@keyframes clsh{from{background-position:100% 0}to{background-position:-100% 0}}
+@media (prefers-reduced-motion:reduce){.cl-spin,.cl-sk i{animation:none}}

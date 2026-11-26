@@ -20,22 +20,40 @@ window.addEventListener('message', e => {
 });
 // The course opens in a full-screen frame on top of the game. The game page never unloads,
 // so switching can't reset it; the game loop is paused while the course is showing.
-let courseFrame = null;
+let courseFrame = null, courseReady = false, courseWanted = false;
+// The course loads quietly in a hidden frame; until it says it's ready, the game header stays and a loader fills only the content area.
+function ensureCourseFrame(hash) {
+  if (courseFrame) return;
+  courseFrame = document.createElement('iframe');
+  courseFrame.name = 'course'; courseFrame.title = 'Course'; courseFrame.className = 'coursefr'; courseFrame.hidden = true;
+  courseFrame.src = SITE.routes.course + (hash || '');
+  document.body.appendChild(courseFrame);
+}
+function showCourseFrame() {
+  const ld = $('courseLoading'); if (ld) ld.hidden = true;
+  courseFrame.hidden = false; try { courseFrame.focus(); } catch (e) {}
+}
+window.addEventListener('message', e => {
+  if (e.origin !== location.origin || !e.data || e.data.ship !== 'ready') return;
+  courseReady = true; if (courseWanted) showCourseFrame();
+});
 function openCourse(hash) {
   save();
-  if (!courseFrame) {
-    courseFrame = document.createElement('iframe');
-    courseFrame.name = 'course'; courseFrame.title = 'Course'; courseFrame.className = 'coursefr';
-    courseFrame.src = SITE.routes.course + (hash || '');
-    document.body.appendChild(courseFrame);
-  } else if (hash) {
-    try { courseFrame.contentWindow.location.hash = hash; } catch (e) { courseFrame.src = SITE.routes.course + hash; }
+  if (!courseFrame) ensureCourseFrame(hash);
+  else if (hash) { try { courseFrame.contentWindow.location.hash = hash; } catch (e) { courseFrame.src = SITE.routes.course + hash; } }
+  courseWanted = true; hostHidden = true; document.body.classList.add('in-course'); setSwitch(true);
+  if (courseReady) showCourseFrame();
+  else {
+    let ld = $('courseLoading');
+    if (!ld) { ld = document.createElement('div'); ld.id = 'courseLoading'; ld.className = 'courseload'; ld.innerHTML = '<div class="cl-card"><div class="cl-spin" aria-hidden="true"></div><b>Opening the course…</b><span class="lvl">Your game is paused and saved.</span></div><div class="cl-sk"><i></i><i></i><i></i><i></i></div>'; document.body.appendChild(ld); }
+    ld.style.top = Math.ceil(document.querySelector('header.top').getBoundingClientRect().bottom) + 'px'; ld.hidden = false;
   }
-  courseFrame.hidden = false; hostHidden = true; document.body.classList.add('in-course');
-  try { courseFrame.focus(); } catch (e) {}
 }
+// warm the course up in the background so the first switch is instant
+(window.requestIdleCallback || (f => setTimeout(f, 1)))(() => setTimeout(() => ensureCourseFrame(''), 2500));
+function setSwitch(course) { document.querySelectorAll('header.top .appsw a').forEach((a, i) => { const on = course ? i === 1 : i === 0; a.classList.toggle('on', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }); }
 function closeCourse() {
-  if (courseFrame) courseFrame.hidden = true;
+  setSwitch(false); courseWanted = false; if (courseFrame) courseFrame.hidden = true; const ld = $('courseLoading'); if (ld) ld.hidden = true;
   hostHidden = false; document.body.classList.remove('in-course');
   try { const cs = JSON.parse(localStorage.getItem('two-weeks-to-scale-v2') || '{}'); if (cs.theme === 'dark' || cs.theme === 'light') document.documentElement.dataset.theme = cs.theme; } catch (e) {}
 }

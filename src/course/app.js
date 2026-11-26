@@ -513,4 +513,5 @@
   window.addEventListener('hashchange', function () { var h = location.hash; if (window.__skipHash === h) { window.__skipHash = null; return; } render(); });
   applyTheme();
   render();
+  if (IN_GAME) { try { window.parent.postMessage({ ship: 'ready' }, location.origin); } catch (e) { } }
 })();
