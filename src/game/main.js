@@ -75,7 +75,7 @@ const CONCEPTS = {
 /* ---------- state ---------- */
 let uid = 1; const nid = () => 'b' + (uid++);
 const BASE = () => ({
-  v: 2, study: true, phase: 'code', co: null, exits: 0, founded: [], money: 0, total: 0, mult: 1, prog: [{ id: nid(), t: 'earn' }],
+  v: 2, study: true, phase: 'code', co: null, exits: 0, founded: [], money: 0, total: 0, mult: 1, prog: [],
   unl: { earn: true }, lv: { earn: 0, cpu: 0, mem: 0, bits: 0, clock: 0, lint: 0, ci: 0 },
   bugsOn: false, st: { bugs: 0, changes: 0 }, bugList: [], learned: ['statement'], solved: {}, chProg: {}, seen: {},
   last: Date.now(), rate: 0,
@@ -238,7 +238,8 @@ function updateMeters() {
 }
 function mentor() {
   let m;
-  if (S.total < 5) m = 'Welcome! Your program earns every tick, and you can type code by hand. Everything you unlock appears on this page, and the 📖 Library explains every concept and component anytime.';
+  if (!S.prog.length && S.total < 5) m = 'Welcome! Your program is empty, so nothing runs yet. Add an <b>earn()</b> block from the palette to start earning every tick, or type code by hand.';
+  else if (S.total < 5) m = 'Your program now earns every tick, and you can still type code by hand. Everything you unlock appears on this page, and the 📖 Library explains every concept and component anytime.';
   else if (!S.unl.repeat) m = 'Memory is tiny: only a few blocks fit. Buy <b>repeat</b> in Concepts (right), or hit <b>Prove it</b> to earn it free.';
   else if (!has('repeat')) m = 'Wrap earn() inside a repeat block: click repeat, and new blocks go inside it. One loop does the work of many lines.';
   else if (S.bugsOn && S.st.bugs > 0 && !has('fix')) m = `Stuck on <b>${esc(S.bugList[0] ? bugTitle(S.bugList[0]) : 'a bug')}</b>. earn() pays $0 until you add <b>fix()</b> to your program.`;
@@ -1083,10 +1084,22 @@ function renderJournal() {
   $('journal').innerHTML = Object.keys(CONCEPTS).map(k => { const c = CONCEPTS[k], on = S.learned.includes(k); return on ? `<div class="card concept"><span class="cap">${['clientServer', 'bottleneck', 'vertical', 'horizontal', 'cache', 'replicas', 'founding', 'database', 'cdn', 'blob', 'queue', 'workers', 'websocket', 'geo', 'viral', 'debt', 'runway'].includes(k) ? 'SYSTEMS' : 'CODE'}</span><h3>${c.t}</h3><p>${c.d.replace(/`([^`]+)`/g, '<code>$1</code>')}</p><pre class="src" style="min-height:0">${c.c.replace(/</g, '&lt;')}</pre></div>` : `<div class="card dim"><h3>🔒 ???</h3><p>Not discovered yet.</p></div>`; }).join('');
 }
 
-/* ---------- settings ---------- */
-$('setBtn').onclick = () => modal(`<h2>Settings</h2><p>Progress saves automatically in this browser.</p>`, [
-  { label: 'Close' },
-  { label: 'Reset all progress', cls: 'org', fn: () => modal('<h2>Reset everything?</h2><p>This wipes money, unlocks, challenges and your startup. It cannot be undone.</p>', [{ label: 'Cancel' }, { label: 'Yes, reset', cls: 'org', fn: () => { try { localStorage.removeItem(SAVE); } catch (e) {} S = BASE(); sel = null; termLines.length = 0; $('mbox').classList.remove('wide'); boot(); } }]) },
+/* ---------- theme + reset ---------- */
+const SUN = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg>';
+const MOON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+const curTheme = () => document.documentElement.dataset.theme || (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+const paintThemeBtn = () => { $('themeBtn').innerHTML = curTheme() === 'dark' ? SUN : MOON; };
+paintThemeBtn();
+$('themeBtn').onclick = () => {
+  const t = curTheme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = t; paintThemeBtn();
+  // shared with the course so both pages stay in the same theme
+  try { const k = 'two-weeks-to-scale-v2', cs = JSON.parse(localStorage.getItem(k) || '{}'); cs.theme = t; localStorage.setItem(k, JSON.stringify(cs)); } catch (e) {}
+  if (courseFrame) try { courseFrame.contentWindow.postMessage({ ship: 'theme', theme: t }, location.origin); } catch (e) {}
+};
+$('resetBtn').onclick = () => modal('<h2>Reset the game?</h2><p>This wipes money, unlocks, challenges and your startup, and starts over from an empty program. Course progress is kept. It cannot be undone.</p>', [
+  { label: 'Cancel' },
+  { label: 'Yes, reset', cls: 'org', fn: () => { try { localStorage.removeItem(SAVE); } catch (e) {} S = BASE(); sel = null; termLines.length = 0; $('mbox').classList.remove('wide'); boot(); } },
 ]);
 
 /* ---------- boot + loop ---------- */

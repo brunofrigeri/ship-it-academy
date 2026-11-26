@@ -106,6 +106,7 @@
   function backToGame() { try { window.parent.postMessage({ ship: 'game' }, location.origin); } catch (e) { } }
   document.addEventListener('click', function (e) { var g = e.target.closest('[data-togame]'); if (g && IN_GAME) { e.preventDefault(); backToGame(); } });
   function applyTheme() { document.documentElement.setAttribute('data-theme', theme()); }
+  window.addEventListener('message', function (e) { var d = e.data; if (e.origin !== location.origin || !d || d.ship !== 'theme' || (d.theme !== 'dark' && d.theme !== 'light')) return; S.theme = d.theme; save(); applyTheme(); var b = document.getElementById('themeBtn'); if (b) b.innerHTML = I(S.theme === 'dark' ? 'sun' : 'moon', 15); });
 
   function topHTML(tab) {
     var tn = todayN();
