@@ -428,3 +428,12 @@ body.in-course{overflow:hidden}
 .bhelp-i p b{font-weight:700}
 .bhelp-h{display:flex;align-items:center;gap:8px}
 .bhelp-h .pblk{min-height:28px;padding:3px 10px;font-size:12.5px;box-shadow:none;cursor:default;display:inline-flex;align-items:center}
+
+/* block info */
+.pwrap{display:inline-flex;align-items:stretch}
+.pwrap .pblk{border-top-right-radius:0;border-bottom-right-radius:0}
+.pinfo{border:1px solid var(--ink);border-left:0;border-radius:0 11px 11px 0;background:var(--card);min-width:28px;font:700 12px/1 ui-monospace,monospace;color:var(--ink2);box-shadow:var(--pop);cursor:pointer}
+.pinfo:hover{background:var(--field);color:var(--ink)}
+.binfo{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:0;padding:10px 12px;border:1px solid var(--line2);border-radius:10px;background:var(--card);font-size:13px}
+.binfo dt{font-weight:700;color:var(--muted)}.binfo dd{margin:0}
+.binfo-name{display:inline-flex;min-height:34px;align-items:center;cursor:default}

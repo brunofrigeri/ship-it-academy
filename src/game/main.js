@@ -42,7 +42,7 @@ function closeCourse() {
 window.addEventListener('message', e => { if (e.origin === location.origin && e.data && e.data.ship === 'game') closeCourse(); });
 const goCourse = hash => openCourse(hash);
 const toCourse = ref => { const p = ref.split(':'); goCourse(p[0] === 't' ? `#t-${p[1]}-${p[2]}` : p[0] === 'x' ? `#x-${p[1]}` : `#l-${p[1]}`); };
-const fmt = n => { if (!isFinite(n)) return '∞'; const a = Math.abs(n); if (a < 1000) return (Math.round(n * 10) / 10).toString(); const u = ['K','M','B','T','Qa','Qi']; let i = -1, v = a; while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; } return (n < 0 ? '-' : '') + v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0) + u[i]; };
+const fmt = n => { if (!isFinite(n)) return '∞'; const a = Math.abs(n); if (a < 10) return (Math.round(n * 100) / 100).toString(); if (a < 1000) return (Math.round(n * 10) / 10).toString(); const u = ['K','M','B','T','Qa','Qi']; let i = -1, v = a; while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; } return (n < 0 ? '-' : '') + v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0) + u[i]; };
 const money = n => '$' + fmt(n);
 
 /* ---------- concepts ---------- */
@@ -149,6 +149,41 @@ const BHELP = {
 };
 const opsTxt = t => t === 'repeat' || t === 'func' ? 'free' : `${COST[t]} op${COST[t] === 1 ? '' : 's'}`;
 const blockTip = (t, e) => { const h = BHELP[t](e); return `${BDEF[t].label} · ${opsTxt(t)}\n${h.what} ${h.more}`; };
+const B_CONCEPT = { earn: 'statement', repeat: 'loop', fix: 'bugs', if: 'if', func: 'func', call: 'func', each: 'arrays', ship: 'arrays', try: 'trycatch', commit: 'vars', deploy: 'vars' };
+const B_JS = {
+  earn: 'earn(); // +$ every time it runs', repeat: 'for (let i = 0; i < 3; i++) {\n  earn();\n}', fix: 'fix(); // closes the oldest open bug',
+  if: 'if (bugs > 0) {\n  fix();\n} else {\n  earn();\n}', func: 'function helper() {\n  earn();\n  earn();\n}', call: 'helper(); // runs the helper body here',
+  each: 'for (const order of orders) {\n  ship(order);\n}', ship: 'ship(orders.shift()); // one order off the array', try: 'try {\n  earn();\n} catch (err) {\n  // the bug is handled here\n}',
+  commit: 'changes++; // commit()', deploy: 'pay(changes * changes);\nchanges = 0;',
+};
+// numbers for the live game: what this block pays, costs and risks right now
+function blockFacts(t) {
+  const e = env(), m = incomeMult(), bug = e.bugChance ? `${(e.bugChance * 100).toFixed(1)}% per run` : 'none yet';
+  const pay = v => `${money(v * m)}${m !== 1 ? ` <span class="lvl">(${money(v)} × ${fmt(m)} income bonus)</span>` : ''}`;
+  const F = {
+    earn: [['Pays', pay(e.earnValue) + ' per run'], ['Bug risk', bug], ['Blocked when', 'any bug is open (pays $0)']],
+    repeat: [['Runs inside', `n times, up to ${bits()} (your bits)`], ['Pays', 'nothing itself: it multiplies what is inside']],
+    fix: [['Does', 'closes the oldest open bug'], ['Wasted when', 'no bug is open (you still pay 4 ops)'], ['Open bugs now', String(S.st.bugs)]],
+    if: [['Does', 'runs one side: the top box when true, the else box when false'], ['Conditions', ['bugs > 0', 'bugs == 0'].concat(S.unl.each ? ['orders.length > 0'] : [], S.unl.commit ? ['changes >= k'] : []).join(' · ')]],
+    func: [['Does', 'nothing on its own: its blocks run when helper() is called'], ['Limit', 'one helper per program']],
+    call: [['Runs', 'every block inside function helper()'], ['Watch out', 'a helper that calls itself forever stops the tick (stack overflow)']],
+    each: [['Runs inside', 'once per order waiting (no bits needed)'], ['Orders now', `${S.st.orders || 0} waiting · +${e.orderRate} per tick · max 40`]],
+    ship: [['Pays', pay(e.orderValue) + ' per order shipped'], ['Bug risk', bug], ['Wasted when', 'no orders are waiting, or a bug is open']],
+    try: [['Does', 'catches a bug inside it: the rest of the try is skipped and catch runs'], ['Result', 'the bug never opens, so nothing gets blocked']],
+    commit: [['Does', 'changes + 1 (pays nothing by itself)'], ['Bug risk', bug], ['Release size', `at most ${fmt(e.maxChanges)} changes`], ['Changes now', String(S.st.changes)]],
+    deploy: [['Pays', `changes × changes × ${pay(e.deployValue)}`], ['Right now', `${fmt(S.st.changes)} changes → ${money(S.st.changes * S.st.changes * e.deployValue * m)}`], ['Rolled back when', 'any bug is open: $0 and the changes are lost']],
+  };
+  return F[t];
+}
+function openBlockInfo(t) {
+  const e = env(), h = BHELP[t](e), c = CONCEPTS[B_CONCEPT[t]];
+  const facts = [['Cost', `${opsTxt(t)} each time it runs · CPU ${e.cpu} ops per tick`]].concat(blockFacts(t));
+  modal(`<span class="cap">CODE BLOCK · ${esc(c.t.toUpperCase())}</span><h2><span class="pblk ${BDEF[t].k} binfo-name">${BDEF[t].label}</span></h2>
+    <p><b>${h.what}</b> ${h.more}</p>
+    <dl class="binfo">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+    <span class="cap">IN JAVASCRIPT</span><pre class="src" style="min-height:0">${esc(B_JS[t])}</pre>`,
+    [{ label: `📖 Learn: ${c.t}`, fn: () => openLibrary('x:' + B_CONCEPT[t]) }, { label: 'Close', cls: 'pri' }]);
+}
 function blockHelpHTML(blocks, e) {
   return `<details class="bhelp" open><summary>How these blocks work</summary><div class="bhelp-g">${blocks.map(t => { const h = BHELP[t](e); return `<div class="bhelp-i"><div class="bhelp-h"><span class="pblk ${BDEF[t].k}">${BDEF[t].label}</span><span class="tag">${opsTxt(t)}</span></div><p><b>${h.what}</b> ${h.more}</p></div>`; }).join('')}</div></details>`;
 }
@@ -163,7 +198,7 @@ function Editor(host, opts) {
   const condLabel = { bug: 'bugs > 0', nobug: 'bugs == 0', orders: 'orders.length > 0', changes: 'changes >=' };
   function blockHTML(n) {
     const d = BDEF[n.t]; const runs = `<span class="runs" data-r="${n.id}">×0</span>`;
-    const ctl = `<span class="ctl"><button data-a="up" data-id="${n.id}" aria-label="Move up">↑</button><button data-a="down" data-id="${n.id}" aria-label="Move down">↓</button><button data-a="del" data-id="${n.id}" aria-label="Delete">✕</button></span>`;
+    const ctl = `<span class="ctl">${opts.info ? `<button data-a="info" data-t="${n.t}" aria-label="About this block" title="What does this block do?">ⓘ</button>` : ''}<button data-a="up" data-id="${n.id}" aria-label="Move up">↑</button><button data-a="down" data-id="${n.id}" aria-label="Move down">↓</button><button data-a="del" data-id="${n.id}" aria-label="Delete">✕</button></span>`;
     if (n.t === 'repeat') { const mx = opts.maxLoop ? opts.maxLoop() : 99; return `<div class="blk ${d.k}" data-b="${n.id}"><div class="bh"><span class="kw">repeat</span>(<input type="number" min="1" max="99" value="${n.n}" data-f="n" data-id="${n.id}" aria-label="Iterations">) {${runs}${n.n > mx ? `<span class="tag r" title="Max repeats = your bits">capped at ${mx}: ${opts.maxLoop === bits ? 'buy bits' : 'challenge limit'}</span>` : ''}${ctl}</div>${slotHTML(n.id, 'body', n.body)}<div class="kw">}</div></div>`; }
     if (n.t === 'if') {
       const conds = opts.conds().map(c => `<option value="${c}" ${n.cond === c ? 'selected' : ''}>${condLabel[c]}</option>`).join('');
@@ -185,7 +220,7 @@ function Editor(host, opts) {
     host.innerHTML = `<div class="fn">function tick() {</div>${slotHTML('root', 'body', prog)}<div class="fn" style="margin:6px 0 0">}</div>`;
     const pal = opts.palette;
     if (pal) pal.innerHTML = ORDER.filter(t => opts.allowed(t) !== 'hide').map(t => {
-      const a = opts.allowed(t), one = t === 'func' && a && JSON.stringify(prog).includes('"t":"func"'); return `<button class="pblk ${BDEF[t].k} ${a && !one ? '' : 'locked'}" data-add="${t}" ${a ? (one ? 'disabled title="Only one helper() per program"' : `title="${esc(blockTip(t, opts.env ? opts.env() : env()))}"`) : 'disabled title="Locked"'}>${a ? '' : '🔒 '}${BDEF[t].label}</button>`;
+      const a = opts.allowed(t), one = t === 'func' && a && JSON.stringify(prog).includes('"t":"func"'); const btn = `<button class="pblk ${BDEF[t].k} ${a && !one ? '' : 'locked'}" data-add="${t}" ${a ? (one ? 'disabled title="Only one helper() per program"' : `title="${esc(blockTip(t, opts.env ? opts.env() : env()))}"`) : 'disabled title="Locked"'}>${a ? '' : '🔒 '}${BDEF[t].label}</button>`; return opts.info && a ? `<span class="pwrap">${btn}<button class="pinfo" data-info="${t}" aria-label="About ${BDEF[t].label}" title="What does ${BDEF[t].label} do?">i</button></span>` : btn;
     }).join('');
     opts.after && opts.after();
   };
@@ -201,6 +236,7 @@ function Editor(host, opts) {
   host.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return; const a = b.dataset.a, prog = opts.get();
     if (a === 'tgt') { ed.target = { pid: b.dataset.pid, key: b.dataset.key }; ed.render(); return; }
+    if (a === 'info') { openBlockInfo(b.dataset.t); return; }
     const p = findParent(prog, b.dataset.id); if (!p) return;
     if (a === 'del') p.l.splice(p.i, 1);
     if (a === 'up' && p.i > 0) [p.l[p.i - 1], p.l[p.i]] = [p.l[p.i], p.l[p.i - 1]];
@@ -214,7 +250,7 @@ function Editor(host, opts) {
     if (f === 'cond') n.cond = e.target.value;
     opts.changed(); ed.render();
   });
-  if (opts.palette) opts.palette.addEventListener('click', e => { const b = e.target.closest('[data-add]'); if (b && !b.disabled) ed.add(b.dataset.add); });
+  if (opts.palette) opts.palette.addEventListener('click', e => { const inf = e.target.closest('[data-info]'); if (inf) { openBlockInfo(inf.dataset.info); return; } const b = e.target.closest('[data-add]'); if (b && !b.disabled) ed.add(b.dataset.add); });
   /* drag and drop: palette → anywhere, block → anywhere (also into repeat/if/function/for/try bodies); drop on the palette to delete */
   let drag = null, suppress = false;
   const within = (el, sel) => el && el.closest(sel);
@@ -321,7 +357,7 @@ function learn(k) {
 
 /* ---------- main editor ---------- */
 const mainEd = Editor($('editor'), {
-  get: () => S.prog, palette: $('palette'), max: memMax, maxLoop: bits,
+  get: () => S.prog, palette: $('palette'), max: memMax, maxLoop: bits, info: true,
   allowed: t => { const nx = UNL.find(u => !S.unl[u.id] && u.show()); const peek = id => S.unl[id] ? true : nx && nx.id === id ? false : 'hide'; return ({ earn: true, repeat: S.unl.repeat, fix: S.bugsOn ? true : 'hide', if: S.bugsOn ? S.unl.if : 'hide', func: peek('func'), call: S.unl.func ? true : 'hide', each: peek('each'), ship: S.unl.each ? true : 'hide', try: peek('try'), commit: peek('commit'), deploy: S.unl.commit ? true : 'hide' })[t]; },
   conds: () => ['bug', 'nobug'].concat(S.unl.each ? ['orders'] : [], S.unl.commit ? ['changes'] : []),
   changed: () => { save(); }, full: () => toast('Out of memory! Buy more RAM or use a loop.'),
