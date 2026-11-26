@@ -1,0 +1,147 @@
+/* ship_it() Academy theme
+   VOICE: friendly, bright, a little toy-like; a study app that wants you to play
+   IDEA: grape-soda workbook: lavender pages, white cards, chunky press-down buttons
+   PICTURE: isometric scenes recoloured in candy tones on a lilac floor
+   COLOUR+TYPE: plum ink, grape primary, tangerine accent, mint success; Sora UI, IBM Plex Mono for code and labels
+   LAYOUT: unchanged structure, rounder cards, bottom-only shadows */
+:root, :root[data-theme="light"] {
+  --paper: #f3f0ff; --paper-2: #f6f3ff; --sheet: #ffffff; --card: #fcfbff; --card-2: #f5f2ff;
+  --line: #e6e0fa; --line-soft: #efeafc; --line-strong: #cfc5f0; --edge: #3b3256;
+  --ink: #1c1631; --ink-2: #3b3354; --muted: #6c6587; --muted-2: #918aab;
+  --green: #d4f5e4; --green-2: #9fe6c2; --green-3: #18a56c; --green-tile: #e7f8ef; --green-tile-line: #bfe9d3;
+  --violet: #ece6ff; --violet-ink: #5a3ee6; --orange: #ffe6d9; --mint: #dcf7ea; --rust: #e8603c;
+  --bad: #e0444b; --bad-bg: #fde3e4; --warn: #d98200; --good: #128553; --blue: #2f80ed;
+  --field: #ffffff; --code: #f4f1fc; --drop: #1c1631;
+  --pri: #6b4eff; --pri-ink: #ffffff; --pri-soft: #ece6ff; --acc: #ff7a45;
+  --radius: 14px; --pop: 0 3px 0 var(--drop);
+  --font: "Sora", ui-sans-serif, system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --server-t: #dbe8ff; --server-l: #b9d1ff; --server-r: #9dbcf9;
+  --lb-t: #ffe1d1; --lb-l: #ffc4a6; --lb-r: #ffa983;
+  --db-t: #e6defe; --db-l: #cdbdfb; --db-r: #b29ef5;
+  --cache-t: #ffd9e4; --cache-l: #ffb8cc; --cache-r: #fb98b5;
+  --queue-t: #d2f3e3; --queue-l: #a9e6c8; --queue-r: #86d8b0;
+  --cdn-t: #cdf1f1; --cdn-l: #a3e2e2; --cdn-r: #7fd1d1;
+  --worker-t: #fff1c7; --worker-l: #ffe199; --worker-r: #f8cf6c;
+  --blob-t: #dfe4ff; --blob-l: #c3cbfb; --blob-r: #a8b3f3;
+  --ext-t: #ebe8f2; --ext-l: #d6d1e2; --ext-r: #c2bcd2;
+  --client-t: #f1edfb; --client-l: #ddd6f0; --client-r: #c8bfe3;
+  --tile: #f1edfd; --tile-line: #e1d9f8;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --paper: #130f1f; --paper-2: #17122a; --sheet: #1d1730; --card: #221b38; --card-2: #201a34;
+  --line: #352c52; --line-soft: #2a2342; --line-strong: #4a3f6e; --edge: #9a8fc4;
+  --ink: #f1ecff; --ink-2: #d6cff0; --muted: #a59dc6; --muted-2: #857da8;
+  --green: #173f2f; --green-2: #1f5a42; --green-3: #3fd394; --green-tile: #1b2c27; --green-tile-line: #2d4a3f;
+  --violet: #2e2456; --violet-ink: #c3b5ff; --orange: #4a2b1f; --mint: #16352a; --rust: #ff8c63;
+  --bad: #ff6b72; --bad-bg: #4a1f27; --warn: #ffb547; --good: #4fe0a0; --blue: #7fb0ff;
+  --field: #241d3b; --code: #251e3d; --drop: #07050d;
+  --pri: #8f78ff; --pri-ink: #ffffff; --pri-soft: #2e2456; --acc: #ff8a5c;
+  --server-t: #3c5a96; --server-l: #30497c; --server-r: #263b66;
+  --lb-t: #a85d3a; --lb-l: #8c4b2e; --lb-r: #733d25;
+  --db-t: #5b47a8; --db-l: #4b3a8d; --db-r: #3d2f74;
+  --cache-t: #a8496a; --cache-l: #8c3c58; --cache-r: #733048;
+  --queue-t: #2f7d5c; --queue-l: #26674b; --queue-r: #1e523c;
+  --cdn-t: #2a7c7c; --cdn-l: #226666; --cdn-r: #1b5252;
+  --worker-t: #8c7330; --worker-l: #735e27; --worker-r: #5c4b1f;
+  --blob-t: #4a56a0; --blob-l: #3d4785; --blob-r: #31396b;
+  --ext-t: #4d4663; --ext-l: #3f3952; --ext-r: #322d42;
+  --client-t: #4a4266; --client-l: #3c3654; --client-r: #2f2a42;
+  --tile: #1c1630; --tile-line: #2c2447;
+  color-scheme: dark;
+}
+
+/* type */
+body { font-family: var(--font); font-size: 13.5px; letter-spacing: -0.005em; }
+h1, h2, h3, h4 { font-family: var(--font); letter-spacing: -0.025em; }
+code, pre, kbd, .tbl th, .kpi .l, .kpi .v, .out b, .out span, .cap, .crumb, .frame-title, .tl button .c, .legend, .note-sm kbd { font-family: var(--mono); }
+.cap { letter-spacing: .08em; }
+.lhead h1, .page h1 { font-weight: 800; letter-spacing: -0.035em; }
+
+/* surfaces */
+.sheet { border-radius: 18px; border-color: var(--line); box-shadow: 0 1px 0 var(--line), 0 16px 32px -26px color-mix(in srgb, var(--pri) 60%, transparent); }
+:root[data-theme="dark"] .sheet { box-shadow: 0 1px 0 var(--line), 0 16px 32px -24px #000; }
+.top { background: color-mix(in srgb, var(--paper) 88%, transparent); border-bottom-color: var(--line); }
+.callout, .tbl, .frame, .cal { border-radius: 12px; }
+pre { border-radius: 12px; }
+
+/* brand */
+.brand { font-family: var(--font); font-weight: 800; letter-spacing: -0.03em; }
+.brand mark { background: none; color: var(--pri); padding: 0; }
+mark, .hl { background: linear-gradient(transparent 58%, color-mix(in srgb, var(--acc) 38%, transparent) 58%); }
+
+/* buttons: chunky press-down */
+.btn-pop, .btn { border-radius: 11px; border-width: 1.5px; box-shadow: 0 3px 0 var(--drop); }
+.btn-pop:hover:not(:disabled), .btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 0 var(--drop); }
+.btn-pop:active:not(:disabled), .btn:active:not(:disabled) { transform: translateY(3px); box-shadow: none; }
+.btn-next, .btn.pri { background: var(--pri); color: var(--pri-ink); border-color: var(--drop); }
+.btn-next svg, .btn.pri svg { color: var(--pri-ink); }
+
+/* active states use grape instead of green */
+.tab { border-radius: 10px; }
+.tab.on, .lessons a.cur, .pill.on { background: var(--pri); color: var(--pri-ink); border-color: var(--drop); box-shadow: 0 3px 0 var(--drop); }
+.tab.on svg, .lessons a.cur svg { color: var(--pri-ink); }
+.tab-play { color: var(--acc); }
+.tab-play.on { background: var(--acc); color: #fff; }
+.chip-day { background: var(--acc); color: #fff; border-color: var(--drop); box-shadow: 0 3px 0 var(--drop); border-radius: 11px; }
+.search, .iconbtn { border-radius: 11px; }
+.lessons a { border-radius: 10px; }
+.bar i, .prog i { background: var(--pri); }
+.tl .fill { background: var(--pri); }
+.tl button.seen .c { background: var(--pri-soft); }
+.tl button.cur .c { background: var(--pri); color: #fff; border-color: var(--drop); box-shadow: 0 0 0 4px color-mix(in srgb, var(--pri) 25%, transparent); }
+.learn label.on .box { background: var(--pri); }
+.check input, .field input[type=range] { accent-color: var(--pri); }
+.tag { border-radius: 999px; }
+.kpi::before { border-radius: 3px; }
+
+/* link back to the game (the game is the app's front page) */
+.playcta { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border-radius: 11px; background: var(--acc); color: #fff; border: 1.5px solid var(--drop); box-shadow: 0 3px 0 var(--drop); font-weight: 700; font-size: 12.5px; text-decoration: none; white-space: nowrap; flex: none; }
+.playcta svg { color: #fff; }
+.playcta:active { transform: translateY(3px); box-shadow: none; }
+/* keep the top bar on one screen: tabs collapse to icons, search to an icon */
+.top { gap: 12px; }
+.tabs { margin-left: 8px; min-width: 0; }
+@media (max-width: 1500px) { .tabs .tab span { display: none; } .tabs .tab { padding: 0 10px; } .tabs .tab.on span { display: inline; } .search { width: auto; } .search span, .search kbd { display: none; } }
+@media (max-width: 1100px) { .tabs .tab.on span { display: none; } .chip-day { display: none; } .brand > span { display: none; } }
+@media (max-width: 700px) { .playcta span { display: none; } }
+/* phones: one column, tabs scroll inside the bar instead of the page */
+.main, .center, .sheet, .prose, .read, .lhead { min-width: 0; }
+.prose pre, .prose .tbl { max-width: 100%; }
+@media (max-width: 900px) {
+  .lesson-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .rightcol { position: static !important; max-height: none !important; }
+}
+@media (max-width: 700px) {
+  .top { gap: 8px; padding: 0 10px; }
+  .tabs { flex: 1 1 auto; overflow-x: auto; scrollbar-width: none; margin-left: 0; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .lhead h1 { font-size: 24px; }
+  .read { padding: 16px 14px 6px; }
+}
+.cheat-grid { grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr)); }
+
+/* game | course switch (same on both pages) */
+.appsw{display:inline-flex;flex:none;padding:3px;gap:3px;border:1.5px solid var(--drop);border-radius:13px;background:var(--sheet);box-shadow:0 3px 0 var(--drop)}
+.appsw a{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 14px;border-radius:10px;font-weight:700;font-size:13px;text-decoration:none;color:var(--ink2);white-space:nowrap}
+.appsw a:hover{background:var(--card-2)}
+.appsw a.on{background:var(--pri);color:#fff}
+@media (max-width: 1100px) { .appsw a { padding: 0 10px; } }
+
+/* ===== flat "systems board" scenes (replaces the isometric look) ===== */
+.iso.flat .dot { fill: var(--line-strong); }
+.iso.flat .tile { fill: transparent; stroke: none; opacity: 1; }
+.iso.flat .tile.hot { fill: color-mix(in srgb, var(--pri) 12%, transparent); stroke: color-mix(in srgb, var(--pri) 55%, transparent); stroke-width: 1.6; stroke-dasharray: 6 5; }
+.iso.flat .tile.fail { fill: color-mix(in srgb, var(--bad) 14%, transparent); stroke: var(--bad); stroke-width: 1.6; }
+.iso.flat .tile.warn { fill: color-mix(in srgb, var(--warn) 14%, transparent); stroke: var(--warn); stroke-width: 1.6; stroke-dasharray: 6 5; }
+.iso.flat .tile.dead { opacity: 0; }
+.iso.flat .cshadow { fill: var(--drop); }
+.iso.flat .card { stroke: var(--ink); stroke-width: 1.4; }
+.iso.flat .strip { stroke: none; }
+.iso.flat .ibox { fill: var(--field); stroke: var(--ink); stroke-width: 1; }
+.iso.flat .nlabel.flat { text-anchor: start; font-family: var(--font); font-weight: 700; fill: var(--ink); letter-spacing: -0.01em; }
+.iso.flat .nsub { font-size: 9px; fill: var(--ink-2); font-family: var(--mono); }
+.iso.flat .edge { stroke-width: 1.8; }
+.iso.flat .nd.hot .inner { animation: none; }
+.iso.flat .nd.hot .card { stroke-width: 2.4; }
+.iso.flat .nd.fail .card { stroke: var(--bad); stroke-width: 2.6; }

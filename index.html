@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ship_it() Academy · Learn to code and design systems by playing</title>
+<meta name="description" content="An incremental game where you write code with blocks, found startups and design their systems: Twitter, Instagram, Discord, Netflix and more. With a full 14-day system design course.">
+<meta name="theme-color" content="#6b4eff">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ship_it() Academy">
+<meta property="og:title" content="ship_it() Academy · Learn to code and design systems by playing">
+<meta property="og:description" content="An incremental game where you write code with blocks, found startups and design their systems: Twitter, Instagram, Discord, Netflix and more. With a full 14-day system design course.">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="3" width="28" height="26" rx="9" fill="var(--pri)"/><path d="M9.5 12.5l4.5 3.5-4.5 3.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M16.5 20h6" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle cx="25" cy="8" r="4" fill="var(--acc)" stroke="var(--paper)" stroke-width="1.6"/></svg>ship_it()</div>
+  <nav class="appsw" aria-label="Switch between game and course"><a class="on" href="./" aria-current="page">⚡ Game</a><a href="course/" id="courseBtn">🎓 Course</a></nav>
+    <nav class="steps" id="steps" aria-label="Game steps"></nav>
+  <div class="sp"></div>
+  <div class="wallet">
+    <div class="money" id="money">$0 <small id="rate">$0/s</small></div>
+    <button class="btn" id="jourBtn" style="min-height:38px">📖 Library <span class="tag v" id="jourN">1</span></button>
+    <span id="coffeeSlot"></span>
+    <button class="iconbtn" id="setBtn" aria-label="Settings"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></button>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- PICKER (between startups) -->
+  <section id="picker" hidden>
+    <div class="sheet"><div class="sec-h" style="margin:0 0 4px"><h2>Pick your next startup</h2></div><p id="pickInfo" style="margin:0"></p></div>
+    <div class="pgrid" id="pickGrid" style="margin-top:14px"></div>
+  </section>
+
+  <!-- COMPANY (phase 2) -->
+  <section id="company" hidden>
+    <div class="sheet co-bar">
+      <div class="co-id"><span class="cap">YOUR STARTUP</span><h2 id="coName"></h2><div class="lvl" id="coStyle"></div></div>
+      <div class="co-stats" id="coStats"></div>
+      <div class="goal"><span>Goal <b id="goalTxt"></b></span><div class="bar"><i id="goalBar"></i></div></div>
+    </div>
+    <div class="mentor slim"><div class="av">M</div><p id="coMentor"></p></div>
+    <div class="co-grid">
+      <div class="sheet palbox"><div class="sec-h" style="margin:0 0 8px;flex-wrap:wrap"><h2>Components</h2><button class="btn study-t" id="studyBtn" aria-pressed="false" title="Explain what each component is for">📖 Study</button></div><div id="palette2" class="pals"></div><p class="lvl" style="margin:8px 0 0">Click to study it. Drag onto the canvas to add it.</p></div>
+      <div class="sheet cvbox"><div class="canvas" id="canvas"></div></div>
+      <div class="sheet side2">
+        <div id="coAcq"></div>
+        <div class="stabs" role="tablist" id="stabs">
+          <button role="tab" data-pane="problems">Problems <i id="bdgP"></i></button>
+          <button role="tab" data-pane="growth">Growth</button>
+          <button role="tab" data-pane="study" id="tabStudy">Study</button>
+          <button role="tab" data-pane="inspect">Inspect</button>
+          <button role="tab" data-pane="mix">Traffic <i id="bdgM"></i></button>
+          <button role="tab" data-pane="fund">Funding <i id="bdgF"></i></button>
+        </div>
+        <div class="spane" data-p="problems"><div id="coProblems"></div></div>
+        <div class="spane" data-p="growth"><div id="coGrowth"></div></div>
+        <div class="spane" data-p="study"><div class="study" id="coStudy"></div></div>
+        <div class="spane" data-p="inspect"><div id="coInsp"></div></div>
+        <div class="spane" data-p="mix"><p class="lvl" style="margin:0 0 6px">Share of each request type that is served right now.</p><div id="coMix"></div></div>
+        <div class="spane" data-p="fund"><div id="coInvest"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CODE DONE (step 1 completed) -->
+  <section id="codeDone" hidden>
+    <div class="sheet done-card" id="codeDoneBody"></div>
+  </section>
+
+  <div class="grid3" id="codeArea">
+    <div class="col">
+      <div class="mentor"><div class="av">M</div><p id="mentor"></p></div>
+      <div class="sheet">
+        <div class="sec-h" style="margin:0"><h2>Your program</h2><span id="memLbl"></span></div>
+        <div class="palette" id="palette"></div>
+        <div class="editor" id="editor"></div>
+      </div>
+      <div class="sheet">
+        <div class="handrow">
+          <button class="btn big org" id="typeBtn">⌨ Type code by hand</button>
+          <span style="color:var(--muted)">+<b id="handVal">$1</b> per keystroke.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="sheet">
+        <div class="sec-h" style="margin:0 0 10px"><h2>Machine</h2><span id="tickLbl"></span></div>
+        <div class="meters">
+          <div class="meter"><div class="row"><span>CPU · ops per tick</span><span id="cpuTxt"></span></div><div class="bar"><i id="cpuBar"></i></div></div>
+          <div class="meter"><div class="row"><span>Memory · blocks</span><span id="memTxt"></span></div><div class="bar"><i id="memBar"></i></div></div>
+          <div class="meter"><div class="row"><span>Bits · max repeats</span><span id="bitTxt"></span></div><div class="bits" id="bitRow"></div></div>
+        </div>
+        <div class="stats">
+          <div class="stat"><b id="sEarn">$0</b><span>last tick</span></div>
+          <div class="stat"><b id="sBugs">0</b><span>open bugs</span></div>
+          <div class="stat"><b id="sChg">0</b><span>changes</span></div>
+          <div class="stat"><b id="sWaste">0</b><span>wasted ops</span></div>
+        </div>
+        <div class="tracker" id="tracker" hidden>
+          <div class="sec-h" style="margin:12px 0 6px"><h2 style="font-size:14px">Bug tracker</h2><span>open bugs block earn() and deploy()</span></div>
+          <div id="bugList"></div>
+        </div>
+      </div>
+      <div class="sheet">
+        <div class="sec-h" style="margin:0 0 10px"><h2>Equivalent code</h2><span>JavaScript</span></div>
+        <pre class="src" id="src"></pre>
+      </div>
+      <div class="term" id="term" aria-live="polite"></div>
+    </div>
+
+    <div class="col">
+      <div class="sheet">
+        <div class="sec-h" style="margin:0 0 4px"><h2>Concepts</h2><span>buy, or prove it</span></div>
+        <div class="rows" id="unlocks"></div>
+      </div>
+      <div class="sheet">
+        <div class="sec-h" style="margin:0 0 4px"><h2>Upgrades</h2></div>
+        <div class="rows" id="upgrades"></div>
+      </div>
+      <div class="sheet">
+        <div class="sec-h" style="margin:0 0 4px"><h2>Challenges</h2><span id="chCount"></span></div>
+        <div class="rows" id="chlist"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="journal" hidden></div>
+<div class="modal" id="modal" role="dialog" aria-modal="true"><div class="mbox" id="mbox"></div></div>
+<div class="toast" id="toast"></div>
+
+<script type="module" src="/src/game/main.js"></script>
+</body>
+</html>

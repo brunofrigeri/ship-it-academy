@@ -1,0 +1,6 @@
+.coffee{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 13px;border-radius:11px;border:1.5px solid #1c1631;background:#ffdd00;color:#1c1631;box-shadow:0 3px 0 #1c1631;font-weight:700;font-size:12.5px;text-decoration:none;white-space:nowrap;flex:none}
+.coffee:hover{transform:translateY(-1px);box-shadow:0 4px 0 #1c1631}
+.coffee:active{transform:translateY(3px);box-shadow:none}
+.coffee-note{margin:10px 0 0;font-size:12.5px;color:var(--muted)}
+.coffee-note a{font-weight:700;color:var(--ink);text-decoration:underline;text-decoration-color:#ffdd00;text-decoration-thickness:3px;text-underline-offset:3px}
+@media (max-width:1100px){.coffee .coffee-l{display:none}.coffee{padding:0 10px}}

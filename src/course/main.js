@@ -1,0 +1,24 @@
+// Course page: the 14-day system design course (animated lessons, labs, exercises, review).
+import '../shared/support.css';
+import './style.css';
+import './theme.css';
+import './boot.js';
+import './iso.js';
+import './scenes-1.js';
+import './scenes-2.js';
+import './scenes-3.js';
+import './scenes-4.js';
+import './extras.js';
+import './extras-ai.js';
+import './rubrics.js';
+import './needs.js';
+import './exercises-1.js';
+import './exercises-2.js';
+import './exercises-3.js';
+import './widgets.js';
+import './content-1.js';
+import './content-2.js';
+import './content-3.js';
+import './content-4.js';
+import './names.js';
+import './app.js';
