@@ -118,4 +118,4 @@ const CHALLENGES = [
     env: { cpu: 12, earnValue: 1, bugChance: 0.08, deployValue: 1, maxLoop: 12 }, target: 1000,
     desc: 'Only 12 ops per tick, but changes persist between ticks. Earn $1,000 over 10 ticks.', reward: { mult: 2 } },
 ];
-export { runTick, runChallenge, CHALLENGES, countBlocks, mulberry32, KIDS, MAX_ORDERS };
+export { runTick, runChallenge, CHALLENGES, countBlocks, mulberry32, KIDS, MAX_ORDERS, COST };

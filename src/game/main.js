@@ -1,7 +1,7 @@
 // ship_it() game: code phase (block programming) + startup phase (system design).
 import '../shared/support.css';
 import './game.css';
-import { runTick, runChallenge, CHALLENGES, countBlocks, mulberry32, KIDS } from './engine.js';
+import { runTick, runChallenge, CHALLENGES, countBlocks, mulberry32, KIDS, COST } from './engine.js';
 import { simulate, STARTUPS, COMP, PALETTE, ALLOWED, KINDS, KIND_NEEDS, RPS_PER_USER, capOf, upkOf } from './sim.js';
 import { COURSE } from './course-data.js';
 import { SITE } from '../site.config.js';
@@ -132,6 +132,25 @@ const BDEF = {
   try: { k: 'k-try', label: 'try { } catch { }', make: () => ({ t: 'try', body: [], catch: [] }) },
 };
 const ORDER = ['earn', 'repeat', 'fix', 'if', 'func', 'call', 'each', 'ship', 'try', 'commit', 'deploy'];
+// plain-language reference for every block (challenges + palette tooltips); e = challenge env or the live game env
+const BHELP = {
+  earn: e => ({ what: `Pays ${money(e.earnValue)} each time it runs.`, more: e.bugChance ? `Each run has a ${Math.round(e.bugChance * 100)}% chance to open a bug. While any bug is open, earn() pays $0.` : 'No bugs here, so it always pays.' }),
+  repeat: e => ({ what: `Runs the blocks inside it n times. Free: only the blocks inside cost ops.`, more: `n is capped at ${e.maxLoop}. Loops can go inside loops: 3 × 3 = 9 runs.` }),
+  fix: () => ({ what: 'Closes the oldest open bug.', more: 'If nothing is broken it does nothing, but you still pay the 4 ops.' }),
+  if: () => ({ what: 'Checks a condition, then runs only one side: the first box when it is true, the else box when it is false.', more: 'Use it to fix only when bugs > 0, or to deploy only once changes are high enough.' }),
+  func: () => ({ what: 'Defines function helper(). The blocks inside do nothing on their own.', more: 'They run each time helper() is called. Only one helper per program.' }),
+  call: () => ({ what: 'Runs everything inside function helper(), right here.', more: 'Costs 1 op plus whatever the helper runs. One block, however big the helper is.' }),
+  each: e => ({ what: 'Runs the blocks inside once for every order waiting in the orders array.', more: `No bits needed: 5 orders means 5 runs, 0 orders means 0 runs.${e.orderRate ? ` ${e.orderRate} new orders arrive every tick.` : ''}` }),
+  ship: e => ({ what: `Takes one order off the array and pays ${money(e.orderValue || 0)}.`, more: `With no orders waiting it wastes its 2 ops.${e.bugChance ? ' It can open a bug, like earn().' : ''}` }),
+  try: () => ({ what: 'Runs the blocks inside. If one of them hits a bug, it is caught: the rest of the try is skipped and the catch box runs.', more: 'A caught bug never opens, so nothing is blocked. You only lose the work that failed.' }),
+  commit: e => ({ what: 'Adds 1 to the changes counter (one finished piece of work, not yet released). Pays nothing by itself.', more: `changes is kept between ticks until you deploy.${e.bugChance ? ` Each commit has a ${Math.round(e.bugChance * 100)}% chance to open a bug.` : ''}` }),
+  deploy: e => ({ what: `Releases everything: pays changes × changes${e.deployValue && e.deployValue !== 1 ? ' × ' + money(e.deployValue) : ' dollars'}, then sets changes back to 0.`, more: `Example: 10 commits then deploy pays ${money(100 * (e.deployValue || 1))}; 30 commits pays ${money(900 * (e.deployValue || 1))}. If any bug is open when it runs, the release is rolled back: you get $0 and lose all the changes. With 0 changes it just wastes its 2 ops.` }),
+};
+const opsTxt = t => t === 'repeat' || t === 'func' ? 'free' : `${COST[t]} op${COST[t] === 1 ? '' : 's'}`;
+const blockTip = (t, e) => { const h = BHELP[t](e); return `${BDEF[t].label} · ${opsTxt(t)}\n${h.what} ${h.more}`; };
+function blockHelpHTML(blocks, e) {
+  return `<details class="bhelp" open><summary>How these blocks work</summary><div class="bhelp-g">${blocks.map(t => { const h = BHELP[t](e); return `<div class="bhelp-i"><div class="bhelp-h"><span class="pblk ${BDEF[t].k}">${BDEF[t].label}</span><span class="tag">${opsTxt(t)}</span></div><p><b>${h.what}</b> ${h.more}</p></div>`; }).join('')}</div></details>`;
+}
 function findList(prog, pid, key) { if (pid === 'root') return prog; let out = null; (function walk(l) { for (const n of l) { if (n.id === pid) { out = n[key]; return; } KIDS.forEach(k => n[k] && !out && walk(n[k])); } })(prog); return out; }
 function findParent(prog, id) { let out = null; (function walk(l) { l.forEach((n, i) => { if (n.id === id) out = { l, i }; KIDS.forEach(k => n[k] && !out && walk(n[k])); }); })(prog); return out; }
 function findNode(prog, id) { const p = findParent(prog, id); return p ? p.l[p.i] : null; }
@@ -165,7 +184,7 @@ function Editor(host, opts) {
     host.innerHTML = `<div class="fn">function tick() {</div>${slotHTML('root', 'body', prog)}<div class="fn" style="margin:6px 0 0">}</div>`;
     const pal = opts.palette;
     if (pal) pal.innerHTML = ORDER.filter(t => opts.allowed(t) !== 'hide').map(t => {
-      const a = opts.allowed(t), one = t === 'func' && a && JSON.stringify(prog).includes('"t":"func"'); return `<button class="pblk ${BDEF[t].k} ${a && !one ? '' : 'locked'}" data-add="${t}" ${a ? (one ? 'disabled title="Only one helper() per program"' : '') : 'disabled title="Locked"'}>${a ? '' : '🔒 '}${BDEF[t].label}</button>`;
+      const a = opts.allowed(t), one = t === 'func' && a && JSON.stringify(prog).includes('"t":"func"'); return `<button class="pblk ${BDEF[t].k} ${a && !one ? '' : 'locked'}" data-add="${t}" ${a ? (one ? 'disabled title="Only one helper() per program"' : `title="${esc(blockTip(t, opts.env ? opts.env() : env()))}"`) : 'disabled title="Locked"'}>${a ? '' : '🔒 '}${BDEF[t].label}</button>`;
     }).join('');
     opts.after && opts.after();
   };
@@ -452,12 +471,14 @@ function openChal(id) {
   $('mbox').classList.add('wide');
   $('mbox').innerHTML = `<div class="sec-h" style="margin:0"><h2>${c.title}</h2><span class="tag ${c.tier === 'Hard' ? 'r' : c.tier === 'Core' ? 'o' : 'g'}">${c.tier}</span><span style="margin-left:auto"><button class="btn" id="chClose">Close</button></span></div><p style="margin:0">${c.desc}</p>
     <div style="display:flex;flex-wrap:wrap;gap:6px"><span class="tag">CPU ${c.env.cpu} ops</span><span class="tag">max ${c.maxBlocks} blocks</span><span class="tag">loop ≤ ${c.env.maxLoop}</span>${c.env.orderRate ? `<span class="tag">+${c.env.orderRate} orders/tick · ship() pays ${money(c.env.orderValue)}</span>` : ''}${c.env.bugChance ? `<span class="tag r">bugs ${Math.round(c.env.bugChance * 100)}%</span>` : ''}${c.ticks ? `<span class="tag v">${c.ticks} ticks</span>` : ''}<span class="tag y">target ${money(c.target)}</span></div>
+    <p class="lvl" style="margin:0">${c.ticks ? `Your tick() runs ${c.ticks} times in a row (counters like changes and orders carry over) and the money is added up.` : 'Your tick() runs once.'} ${c.seeds > 1 ? `Bugs are random, so this is repeated ${c.seeds} times and you need the <b>average</b> to reach the target.` : ''} CPU: blocks stop running once the ${c.env.cpu} ops are used up.</p>
+    ${blockHelpHTML(c.blocks, c.env)}
     <div class="chl" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)"><div><div class="palette" id="chPal"></div><div class="editor" id="chEdHost"></div></div><div><pre class="src" id="chSrc"></pre><div id="chOut"></div></div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn pri" id="runCh">▶ Run tests (${c.seeds} run${c.seeds > 1 ? 's' : ''})</button><button class="btn" id="clrCh">Clear</button><span class="lvl" id="chMem"></span></div>`;
   $('modal').classList.add('on');
   $('chClose').onclick = () => closeModal();
   chEd = Editor($('chEdHost'), {
-    get: () => S.chProg[c.id], palette: $('chPal'), max: () => c.maxBlocks, maxLoop: () => c.env.maxLoop,
+    get: () => S.chProg[c.id], palette: $('chPal'), env: () => c.env, max: () => c.maxBlocks, maxLoop: () => c.env.maxLoop,
     allowed: t => c.blocks.includes(t) ? true : 'hide', conds: () => ['bug', 'nobug'].concat(c.blocks.includes('each') ? ['orders'] : [], c.blocks.includes('commit') ? ['changes'] : []),
     changed: () => { chRes = null; $('chOut').innerHTML = ''; save(); }, full: () => toast(`This challenge allows only ${c.maxBlocks} blocks.`),
     after: () => { $('chSrc').innerHTML = srcOf(S.chProg[c.id]); $('chMem').textContent = `${countBlocks(S.chProg[c.id])}/${c.maxBlocks} blocks`; },
