@@ -91,7 +91,8 @@ function load() {
 }
 
 /* ---------- economy ---------- */
-const env = () => ({ cpu: 6 + S.lv.cpu * 4, earnValue: 1 + S.lv.earn, bugChance: S.bugsOn ? 0.08 * Math.pow(0.8, S.lv.lint) : 0, deployValue: (1 + S.lv.earn) * 0.03 * Math.pow(2, S.lv.ci), maxLoop: bits(), orderRate: S.unl.each ? 2 + S.lv.cust : 0, orderValue: (1 + S.lv.earn) * 5 });
+const env = () => ({ cpu: 6 + S.lv.cpu * 4, earnValue: 1 + S.lv.earn, bugChance: S.bugsOn ? 0.08 * Math.pow(0.8, S.lv.lint) : 0, deployValue: (1 + S.lv.earn) * 0.03 * Math.pow(2, S.lv.ci), maxLoop: bits(), orderRate: S.unl.each ? 2 + S.lv.cust : 0, orderValue: (1 + S.lv.earn) * 5, maxChanges: maxChanges() });
+const maxChanges = () => 1000 + 1000 * (S.lv.ci || 0);
 const bits = () => 3 + S.lv.bits;
 const memMax = () => 3 + S.lv.mem;
 const tps = () => 1 + S.lv.clock * 0.5;
@@ -104,7 +105,7 @@ const UPG = [
   { id: 'clock', name: 'Overclock', d: '+0.5 ticks per second.', base: 500, g: 3, max: 6, show: () => S.total > 300 },
   { id: 'lint', name: 'Linter', d: 'Bugs appear 20% less often.', base: 400, g: 2.6, max: 8, show: () => S.bugsOn },
   { id: 'cust', name: 'More customers', d: '+1 order arrives every tick.', base: 60000, g: 1.8, max: 30, show: () => S.unl.each },
-  { id: 'ci', name: 'CI pipeline', d: 'deploy() pays twice as much.', base: 2000000, g: 4, max: 10, show: () => S.unl.commit },
+  { id: 'ci', name: 'CI pipeline', d: 'deploy() pays twice as much, and a release can hold 1,000 more changes.', base: 2000000, g: 4, max: 10, show: () => S.unl.commit },
 ];
 const cost = u => Math.ceil(u.base * Math.pow(u.g, S.lv[u.id] || 0));
 const UNL = [
@@ -115,7 +116,7 @@ const UNL = [
   { id: 'try', name: 'try { } catch { }', concept: 'trycatch', price: 1000000, ch: 'c9', d: 'Error handling: catch bugs before they block you.', show: () => S.unl.each },
   { id: 'commit', name: 'commit() / deploy()', concept: 'vars', price: 5000000, ch: 'c4', d: 'State: batch changes, deploy pays changes².', show: () => S.unl.try },
 ];
-const START_PRICE = 25000000; // minimum to found the first startup
+const START_PRICE = 1e12; // minimum to found the first startup
 
 /* ---------- blocks ---------- */
 const BDEF = {
@@ -143,7 +144,7 @@ const BHELP = {
   each: e => ({ what: 'Runs the blocks inside once for every order waiting in the orders array.', more: `No bits needed: 5 orders means 5 runs, 0 orders means 0 runs.${e.orderRate ? ` ${e.orderRate} new orders arrive every tick.` : ''}` }),
   ship: e => ({ what: `Takes one order off the array and pays ${money(e.orderValue || 0)}.`, more: `With no orders waiting it wastes its 2 ops.${e.bugChance ? ' It can open a bug, like earn().' : ''}` }),
   try: () => ({ what: 'Runs the blocks inside. If one of them hits a bug, it is caught: the rest of the try is skipped and the catch box runs.', more: 'A caught bug never opens, so nothing is blocked. You only lose the work that failed.' }),
-  commit: e => ({ what: 'Adds 1 to the changes counter (one finished piece of work, not yet released). Pays nothing by itself.', more: `changes is kept between ticks until you deploy.${e.bugChance ? ` Each commit has a ${Math.round(e.bugChance * 100)}% chance to open a bug.` : ''}` }),
+  commit: e => ({ what: 'Adds 1 to the changes counter (one finished piece of work, not yet released). Pays nothing by itself.', more: `changes is kept between ticks until you deploy.${e.maxChanges ? ` A release holds at most ${fmt(e.maxChanges)} changes; commits beyond that are wasted.` : ''}${e.bugChance ? ` Each commit has a ${Math.round(e.bugChance * 100)}% chance to open a bug.` : ''}` }),
   deploy: e => ({ what: `Releases everything: pays changes × changes${e.deployValue && e.deployValue !== 1 ? ' × ' + money(e.deployValue) : ' dollars'}, then sets changes back to 0.`, more: `Example: 10 commits then deploy pays ${money(100 * (e.deployValue || 1))}; 30 commits pays ${money(900 * (e.deployValue || 1))}. If any bug is open when it runs, the release is rolled back: you get $0 and lose all the changes. With 0 changes it just wastes its 2 ops.` }),
 };
 const opsTxt = t => t === 'repeat' || t === 'func' ? 'free' : `${COST[t]} op${COST[t] === 1 ? '' : 's'}`;
@@ -404,6 +405,7 @@ function tick() {
   if (fixed.length) log(`🔧 fix() patched ${fixed.length > 2 ? fixed.length + ' bugs' : fixed.map(b => b.name).join(', ')}`, 'g');
   if (lastRun.rollbacks) log(`↩ deploy() rolled back ${lastRun.lost} changes: ${S.bugList[0] ? S.bugList[0].name : 'a bug'} was still open`, 'e');
   if (lastRun.deploys && gain > 0) log(`🚀 deployed → ${money(gain)}`, 'g');
+  if (lastRun.full && !S.seen.full) { S.seen.full = 1; log(`📦 The release is full (${fmt(maxChanges())} changes). Extra commits are wasted: deploy, or buy CI pipeline for bigger releases.`, 'y'); }
   if (lastRun.caught) log(`🧯 catch handled ${lastRun.caught} error${lastRun.caught > 1 ? 's' : ''}: that work was skipped, nothing blocked`, 'y');
   if (lastRun.stack && !S.seen.stack) { S.seen.stack = 1; log('💥 RangeError: Maximum call stack size exceeded. helper() keeps calling itself, so the tick was halted.', 'e'); }
   if (lastRun.overflow > 0 && !S.seen.ovf) { S.seen.ovf = 1; log(`📦 The orders array is full (40). New orders are being lost: ship faster!`, 'y'); }

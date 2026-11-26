@@ -65,8 +65,9 @@ function runTick(prog, env, st, rng) {
           tryDepth++;
           try { exec(n.body); tryDepth--; } catch (e) { tryDepth--; if (e !== THROWN) throw e; exec(n.catch || []); }
           break;
-        case 'commit':
-          st.changes++; maybeBug('commit');
+        case 'commit': // the release branch holds at most env.maxChanges changes; more commits are wasted
+          if (env.maxChanges && st.changes >= env.maxChanges) { r.wasted++; r.full = true; break; }
+          maybeBug('commit'); st.changes++;
           break;
         case 'deploy':
           if (st.changes === 0) { r.wasted++; break; }
