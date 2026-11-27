@@ -1,0 +1,110 @@
+DAY = 13
+
+L0 = [
+  {'part': 'read'},
+  "RADIO is a way to spend 45 minutes well. Without a structure, candidates either jump straight into component code or talk about everything at the same shallow depth. With one, you show the interviewer a complete design early and then go deep where it matters.",
+  {'h': 'A worked example: design an image carousel'},
+  {'table': {'head': ['Step', 'What you say (abridged)'], 'rows': [
+    ['Requirements', '"Product photos on a shop page, 3 to 20 images, swipe on mobile, arrows and dots on desktop, keyboard accessible, lazy loading. Out of scope: zoom, video."'],
+    ['Architecture', '"A `Carousel` owns the current index; it renders a `Track` of `Slide`s, `Controls` and `Dots`. Images come as props; no server calls of its own."'],
+    ['Data model', '"State: `index`, `isDragging`, `dragOffset`. Derived: `canPrev`, `canNext`. Props: `images[{src, srcset, alt, width, height}]`, `initialIndex`, `loop`."'],
+    ['Interface', '"`<Carousel images={...} initialIndex={0} loop onChange={i => ...} />`, plus `ref.goTo(i)`. Arrow keys move, Home and End jump."'],
+    ['Optimisations', '"Only the current and neighbouring slides load images; first slide high priority. Transform-based movement for 60 fps. Reserve aspect ratio to avoid CLS. Live region announces \'Image 3 of 8\'."']]}},
+  {'h': 'What to write on the board'},
+  {'ul': ['Top: the requirements in one line each, and what is out of scope.', 'Middle: the component tree with the state each node owns, next to it.', 'Side: the public interface (props, events, methods) as you would write it in TypeScript.', 'Bottom: the optimisation list, ticked off as you discuss each.']},
+  {'part': 'real'},
+  {'case': {'who': 'GreatFrontEnd', 'when': 'front-end system design guide', 'title': 'Where the RADIO framework comes from',
+    'body': ["The RADIO framework (Requirements, Architecture, Data model, Interface, Optimisations) was popularised by GreatFrontEnd's front-end system design guide, written by engineers who conducted frontend interviews at large tech companies. It adapts the structure of backend system design interviews to the concerns of client applications: component architecture, client state, component and API interfaces, and performance, accessibility and UX details."],
+    'lesson': 'Interviewers look for coverage first, then depth. A framework makes coverage automatic so your attention can go to depth.',
+    'src': [['Front End System Design: RADIO framework (GreatFrontEnd)', 'https://www.greatfrontend.com/front-end-system-design-playbook/framework']]}},
+  {'part': 'apply'},
+  {'code': "// Write the Interface step as types: it is precise and quick to discuss\ntype Image = { src: string; srcset?: string; alt: string; width: number; height: number };\n\ninterface CarouselProps {\n  images: Image[];\n  initialIndex?: number;       // default 0\n  loop?: boolean;              // default false\n  onChange?(index: number): void;\n  renderSlide?(img: Image, active: boolean): React.ReactNode;   // escape hatch for custom slides\n}\n\ninterface CarouselHandle { goTo(index: number): void; next(): void; prev(): void; }\n\n// Internal state, written next to the component tree on the board\ntype CarouselState = { index: number; isDragging: boolean; dragOffset: number };", 'lang': 'ts', 'cap': 'The Interface step, written down'},
+  {'check': ['Practise RADIO on three components: carousel, modal, data table.', 'Time-box: 5 min requirements, 10 architecture and data, 10 interface, the rest optimisations and deep dive.', 'Always state what is out of scope.', 'Write the props and events as types.', 'Name at least one item each for performance, accessibility and error handling.', 'Ask the interviewer where they want depth.']},
+]
+
+L1 = [
+  {'part': 'read'},
+  "The hard parts of an autocomplete are not the dropdown. They are timing (debouncing and stale responses), caching (so going back a character is instant), and accessibility (so keyboard and screen reader users can use it at all). Interviewers know this and probe exactly there.",
+  {'h': 'Client caching that makes it feel instant'},
+  {'ul': ['Cache results by normalised query (trimmed, lower-cased) in a small LRU, perhaps 50 entries.', 'If the server returns a complete list for a prefix (fewer results than the limit), longer queries can be answered by filtering that list locally with no request at all.', 'Backspacing shows cached results immediately.', 'Expire entries after a few minutes if suggestions change (trending searches).']},
+  {'h': 'Keyboard behaviour to specify'},
+  {'table': {'head': ['Key', 'Behaviour'], 'rows': [
+    ['Down / Up', 'Move the highlight through options (wrapping is optional); open the list if closed'],
+    ['Enter', 'Select the highlighted option; if none, submit the typed text'],
+    ['Escape', 'Close the list; a second Escape clears the input'],
+    ['Tab', 'Close the list and move focus on (optionally accept the highlight)'],
+    ['Typing', 'Keep focus in the input; reset the highlight']]}},
+  {'part': 'real'},
+  {'case': {'who': 'W3C WAI', 'when': 'ARIA Authoring Practices Guide', 'title': 'The combobox pattern',
+    'body': ["The W3C's ARIA Authoring Practices Guide defines the combobox pattern used by accessible autocompletes: an input with role combobox that controls a listbox popup, focus that stays in the input while `aria-activedescendant` identifies the highlighted option, and specified keyboard behaviour for arrows, Enter, Escape and more. It includes working examples that can be tested with screen readers."],
+    'lesson': 'Do not invent keyboard and ARIA behaviour; follow the published pattern and test it with a screen reader.',
+    'src': [['Combobox Pattern (WAI-ARIA APG)', 'https://www.w3.org/WAI/ARIA/apg/patterns/combobox/']]}},
+  {'part': 'apply'},
+  {'code': "// Suggestion cache: exact hits, plus local filtering from a complete shorter prefix\nconst LIMIT = 5;\nclass SuggestCache {\n  constructor(max = 50) { this.max = max; this.map = new Map(); }\n  get(q) {\n    if (this.map.has(q)) { const v = this.map.get(q); this.map.delete(q); this.map.set(q, v); return v.items; }\n    for (let i = q.length - 1; i > 0; i--) {               // look for a complete shorter prefix\n      const p = this.map.get(q.slice(0, i));\n      if (p && p.complete) return p.items.filter(s => s.startsWith(q));\n    }\n    return null;\n  }\n  set(q, items) {\n    this.map.set(q, { items, complete: items.length < LIMIT });\n    if (this.map.size > this.max) this.map.delete(this.map.keys().next().value);\n  }\n}\n\nconst words = ['react', 'reactive', 'read', 'ready', 'real', 'realm', 'redux', 'refetch'];\nlet requests = 0;\nconst server = q => { requests++; return words.filter(w => w.startsWith(q)).slice(0, LIMIT); };\nconst cache = new SuggestCache();\nfunction suggest(q) { let r = cache.get(q); if (!r) { r = server(q); cache.set(q, r); } return r; }\n\nfor (const q of ['r', 're', 'rea', 'reac', 'react', 'rea', 'red']) console.log(q.padEnd(6), suggest(q).join(', '));\nconsole.log('server requests:', requests, 'for 7 keystrokes');", 'lang': 'js', 'cap': 'Run it: fewer requests, instant backspace'},
+  {'check': ['Debounce input and set a minimum query length.', 'Abort or ignore stale responses.', 'Cache by normalised query; reuse complete prefix results.', 'Implement the APG combobox roles and keyboard behaviour.', 'Design loading, empty and error states inside the popup.', 'Test with a screen reader and on a phone keyboard.']},
+]
+
+L2 = [
+  {'part': 'read'},
+  "A feed is a long list that grows forever. The two things that break first are memory and smoothness: thousands of DOM nodes and decoded images make scrolling stutter and eventually crash tabs on phones. The fix is to render only what is near the viewport, and to keep the scroll position stable as content changes.",
+  {'h': 'Windowing, in numbers'},
+  "With a 800 px viewport and posts about 400 px tall, only 2 or 3 posts are visible. Rendering those plus a few above and below (overscan) means around 10 posts in the DOM at any time, whether the user has scrolled through 20 or 2,000. Variable heights need measuring: estimate first, measure after render, and keep a running offset table.",
+  {'h': 'Keeping the reader’s place'},
+  {'ul': ['When older content loads above (chat) or images load late, adjust the scroll position by the height added, so the visible content does not move.', 'CSS `overflow-anchor` (scroll anchoring) does this automatically in many cases; virtualised lists usually need to do it themselves.', 'Persist the feed and scroll offset when navigating to a post and back, so the user returns to the same place.']},
+  {'part': 'real'},
+  {'case': {'who': 'Chrome team (web.dev)', 'when': 'guidance', 'title': 'Virtualising long lists, and content-visibility',
+    'body': ["Web.dev's guidance on large lists recommends windowing (with libraries such as react-window) so that only visible rows are rendered, which cuts both initial render time and memory. For long pages that are not strict lists, the CSS property `content-visibility: auto` lets the browser skip layout and painting of off-screen sections; in the article's demo of a long blog page it gave a several-fold improvement in initial rendering time."],
+    'lesson': 'Off-screen content should cost nearly nothing. Virtualise lists, and let the browser skip off-screen sections.',
+    'src': [['Virtualize large lists with react-window (web.dev)', 'https://web.dev/articles/virtualize-long-lists-react-window'], ['content-visibility (web.dev)', 'https://web.dev/articles/content-visibility']]}},
+  {'part': 'apply'},
+  {'code': "// Which rows to render, given variable measured heights\nfunction visibleRange(heights, scrollTop, viewport, overscan = 3) {\n  let offset = 0, start = 0;\n  while (start < heights.length && offset + heights[start] <= scrollTop) offset += heights[start++];\n  const top = offset;                     // where the first visible row begins\n  let end = start;\n  while (end < heights.length && offset < scrollTop + viewport) offset += heights[end++];\n  const s = Math.max(0, start - overscan), e = Math.min(heights.length, end + overscan);\n  let padTop = top; for (let i = s; i < start; i++) padTop -= heights[i];\n  return { start: s, end: e, padTop };\n}\n\nconst heights = Array.from({ length: 2000 }, (_, i) => 300 + (i * 37) % 200);   // posts 300-499 px\nfor (const y of [0, 5000, 400000]) {\n  const r = visibleRange(heights, y, 800);\n  console.log(`scrollTop ${y}: render rows ${r.start}-${r.end - 1} (${r.end - r.start} of 2000), spacer ${r.padTop}px`);\n}", 'lang': 'js', 'cap': 'Run it: about 10 rows in the DOM out of 2,000'},
+  {'check': ['Virtualise the feed or use content-visibility for long sections.', 'Reserve image space with width and height or aspect-ratio.', 'Load images lazily, with the first one prioritised.', 'Show new posts as a pill, never by pushing content down.', 'Preserve scroll position across navigation.', 'Profile memory after scrolling 500 items on a mid-range phone.']},
+]
+
+L3 = [
+  {'part': 'read'},
+  "Collaborative editing has one hard requirement: every copy of the document must end up the same, no matter in what order edits arrive. Operational transformation (OT) does this by adjusting an incoming edit against the edits it did not know about. CRDTs do it with data structures whose merges always converge.",
+  {'h': 'OT, by example'},
+  "The document is `abc`. Alice inserts `X` at position 1; at the same moment Bob inserts `Y` at position 2. Alice receives Bob's edit, but her insert has shifted everything after position 1 by one, so Bob's insert must move to position 3. Bob receives Alice's edit at position 1, before his own, so it stays at 1. Both end with `aXbYc`. With a central server that orders operations, this transform function plus 'send one batch at a time and wait for acknowledgement' is the whole algorithm.",
+  {'h': 'Choosing'},
+  {'ul': ['Text editor with a central server: OT is proven and compact (Google Docs).', 'Objects with properties (design tools, whiteboards): per-property last-writer-wins via a server is often enough (Figma).', 'Peer-to-peer or long offline periods: CRDTs (Yjs, Automerge) merge without a central authority.']},
+  {'part': 'real'},
+  {'case': {'who': 'Google Docs', 'when': '2010', 'title': 'Operational transformation and the collaboration protocol',
+    'body': ["When Google rebuilt the Docs editor in 2010, it published a three-part series explaining how real-time collaboration worked. Every change is an operation (insert text, delete text, apply style); when changes from two editors conflict, operational transformation adjusts one against the other so both converge. A collaboration protocol controls when each editor sends its pending changes and how it transforms incoming ones against changes the server has not yet acknowledged."],
+    'lesson': 'Represent edits as operations, let a server order them, and transform concurrent operations. That is enough for character-by-character collaboration.',
+    'src': [['What’s different about the new Google Docs: Conflict resolution', 'https://drive.googleblog.com/2010/09/whats-different-about-new-google-docs_22.html'], ['Making collaboration fast', 'https://drive.googleblog.com/2010/09/whats-different-about-new-google-docs.html']]}},
+  {'case': {'who': 'Figma', 'when': '2019', 'title': 'Multiplayer without full OT',
+    'body': ["Figma co-founder Evan Wallace explained that Figma clients talk to servers over WebSockets and that the team found OT more complex than they needed. A Figma document is a tree of objects with properties, and the server is the authority: concurrent changes to the same property resolve by last writer wins, as decided by the server, while changes to different properties both survive. They took ideas from CRDTs but simplified them because a central server exists."],
+    'lesson': 'Choose the simplest consistency model your data allows. A central authority removes much of the complexity of general algorithms.',
+    'src': [['How Figma’s multiplayer technology works', 'https://www.figma.com/blog/how-figmas-multiplayer-technology-works/']]}},
+  {'part': 'apply'},
+  {'code': "// Minimal OT for concurrent inserts: transform, apply in both orders, converge\nconst apply = (doc, op) => doc.slice(0, op.pos) + op.text + doc.slice(op.pos);\nfunction transform(op, against) {             // shift op to account for an op applied before it\n  if (against.pos < op.pos || (against.pos === op.pos && against.site < op.site))\n    return { ...op, pos: op.pos + against.text.length };\n  return op;\n}\n\nconst doc = 'abc';\nconst alice = { pos: 1, text: 'X', site: 'alice' };\nconst bob   = { pos: 2, text: 'Y', site: 'bob' };\nconst atAlice = apply(apply(doc, alice), transform(bob, alice));\nconst atBob   = apply(apply(doc, bob), transform(alice, bob));\nconsole.log('Alice sees', atAlice, '| Bob sees', atBob, '| converged:', atAlice === atBob);\n\n// Same position: the site id breaks the tie identically on both sides\nconst a2 = { pos: 1, text: 'A', site: 'alice' }, b2 = { pos: 1, text: 'B', site: 'bob' };\nconsole.log(apply(apply(doc, a2), transform(b2, a2)), apply(apply(doc, b2), transform(a2, b2)));", 'lang': 'js', 'cap': 'Run it: both orders give the same document'},
+  {'check': ['Model edits as operations, not whole-document saves.', 'Apply local edits immediately; send them in acknowledged batches.', 'Transform incoming operations against unacknowledged local ones.', 'Pick OT, server-authoritative LWW or a CRDT based on your data and topology.', 'Show presence (cursors, selections) as ephemeral state, not document state.', 'Test with two clients, artificial latency and reordering.']},
+]
+
+L4 = [
+  {'part': 'read'},
+  "A design system is a product whose users are other engineers and designers. It succeeds when using it is the easiest way to build something correct, and fails when it becomes a gate teams route around. Micro-frontends are an organisational tool with a performance cost; they make sense when team independence is the bottleneck, not before.",
+  {'h': 'Layers of a design system'},
+  {'ol': ['**Tokens:** named values for colour, spacing, type, radius and motion, exported to CSS variables and native platforms.', '**Primitives:** Box, Stack, Text, Icon, which apply tokens.', '**Components:** Button, Input, Dialog, Menu, with accessibility built in and tested.', '**Patterns:** forms, empty states, page layouts, documented with do and don’t examples.']},
+  {'h': 'When micro-frontends pay off'},
+  {'table': {'head': ['Signal', 'Monolith frontend', 'Micro-frontends'], 'rows': [
+    ['Teams on the frontend', 'Up to a few teams', 'Many teams with separate domains'],
+    ['Release coordination', 'Fine', 'The bottleneck: teams wait for each other'],
+    ['Tech stacks', 'One', 'Migration from an old stack piece by piece'],
+    ['Costs', 'One bundle, shared tooling', 'Duplicate dependencies, runtime composition, consistency effort']]}},
+  {'part': 'real'},
+  {'case': {'who': 'Slack', 'when': '2019', 'title': 'The gradual design system: building Slack Kit',
+    'body': ["Slack described how its design system, Slack Kit, grew gradually instead of being built by a large dedicated team up front. Early on there was not even a clear answer to which colour to use. With few dedicated people, the Slack Kit team focused on process: clear guidelines for adding components to the library, with product engineering teams building many of them. The desktop client's move to React was a turning point that let the component library spread through the product."],
+    'lesson': 'A design system can start small and grow with contribution rules. Tie its adoption to migrations that are happening anyway.',
+    'src': [['The Gradual Design System: How We Built Slack Kit', 'https://slack.engineering/the-gradual-design-system-how-we-built-slack-kit']]}},
+  {'case': {'who': 'Martin Fowler’s site (Cam Jackson)', 'when': '2019', 'title': 'Micro Frontends',
+    'body': ["The widely cited article on micro-frontends describes splitting a frontend into features owned end to end by independent teams, with integration at build time or (more commonly) at run time in the browser. It lists the benefits (incremental upgrades, simple decoupled codebases, independent deployment, autonomous teams) and the downsides, including larger payloads from duplicated dependencies, environment differences and operational complexity."],
+    'lesson': 'Micro-frontends trade bytes and complexity for team autonomy. Adopt them for organisational reasons, and budget for the cost.',
+    'src': [['Micro Frontends (martinfowler.com)', 'https://martinfowler.com/articles/micro-frontends.html']]}},
+  {'part': 'apply'},
+  {'code': "// Generate CSS variables (light and dark) from one token source\nconst tokens = {\n  color: {\n    bg:     { light: '#ffffff', dark: '#0f1115' },\n    text:   { light: '#1b1f24', dark: '#e6e8eb' },\n    accent: { light: '#0b5fff', dark: '#5b9bff' },\n  },\n  space: { 1: '4px', 2: '8px', 3: '12px', 4: '16px', 6: '24px' },\n  radius: { sm: '4px', md: '8px' },\n};\nfunction toCss(t) {\n  const lines = { light: [], dark: [], shared: [] };\n  for (const [name, v] of Object.entries(t.color)) { lines.light.push(`--color-${name}: ${v.light};`); lines.dark.push(`--color-${name}: ${v.dark};`); }\n  for (const group of ['space', 'radius']) for (const [k, v] of Object.entries(t[group])) lines.shared.push(`--${group}-${k}: ${v};`);\n  return `:root {\\n  ${[...lines.shared, ...lines.light].join('\\n  ')}\\n}\\n[data-theme=\"dark\"] {\\n  ${lines.dark.join('\\n  ')}\\n}`;\n}\nconsole.log(toCss(tokens));", 'lang': 'js', 'cap': 'Run it: tokens to themeable CSS'},
+  {'check': ['Define tokens first and generate platform outputs from one source.', 'Build accessibility into each component and test it once there.', 'Prefer composition (slots, subcomponents) over many boolean props.', 'Publish contribution rules and a review process.', 'Measure adoption (imports of the library vs custom components).', 'Only split into micro-frontends when release coordination between teams is the bottleneck.']},
+]
+
+LESSONS = [L0, L1, L2, L3, L4]
