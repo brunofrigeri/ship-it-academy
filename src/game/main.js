@@ -62,6 +62,8 @@ const goCourse = hash => openCourse(hash);
 const toCourse = ref => { const p = ref.split(':'); goCourse(p[0] === 't' ? `#t-${p[1]}-${p[2]}` : p[0] === 'x' ? `#x-${p[1]}` : `#l-${p[1]}`); };
 const fmt = n => { if (!isFinite(n)) return '∞'; const a = Math.abs(n); if (a < 10) return (Math.round(n * 100) / 100).toString(); if (a < 1000) return (Math.round(n * 10) / 10).toString(); const u = ['K','M','B','T','Qa','Qi']; let i = -1, v = a; while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; } return (n < 0 ? '-' : '') + v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0) + u[i]; };
 const money = n => '$' + fmt(n);
+// the top bar shows 3 decimals on big numbers ($50.006M) so a growing balance visibly moves
+const moneyTop = n => { if (!isFinite(n)) return '$∞'; const a = Math.abs(n); if (a < 1000) return money(n); const u = ['K','M','B','T','Qa','Qi']; let i = -1, v = a; while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; } return (n < 0 ? '-$' : '$') + v.toFixed(3) + u[i]; };
 
 /* ---------- concepts ---------- */
 const CONCEPTS = {
@@ -73,7 +75,7 @@ const CONCEPTS = {
   func: { t: 'Functions', d: 'A function gives a name to a group of statements. Define it once with `function helper() { }`, then call `helper()` from anywhere: inside loops, in both branches of an if, even from another function. The body is stored once, so every extra call costs just 1 block of memory. A function that calls itself forever never returns: that is a stack overflow, and here it halts the tick.', c: 'function helper() {\n  if (bugs > 0) fix();\n  else earn();\n}\nhelper();\nhelper();' },
   arrays: { t: 'Arrays & iteration', d: 'Customers now place orders, and they pile up in an array: `orders`. ship() takes one order off the array and pays 5× earn(). A repeat loop runs a fixed number of times (wasting ops when there are fewer orders), but `for (const order of orders)` runs exactly once per item, however many there are. Iterating over data, not a hard-coded count, is how real programs handle lists. The array holds at most 40 orders; new orders beyond that are lost. Orders, not the CPU, limit ship(): once every order is shipped, extra ship() calls just waste ops, so spend spare ops on earn() and buy More customers for more orders.', c: 'const orders = [o1, o2, o3];\nfor (const order of orders) {\n  ship(order); // runs 3 times\n}' },
   trycatch: { t: 'Error handling', d: 'try { } catch { } turns a crash into something you handle. If a bug happens inside try, it is thrown as an exception: the rest of the try body is skipped, that unit of work pays nothing, and the catch body runs instead. The bug never reaches the tracker, so nothing gets blocked. Wrap small units of work: an error in a tiny try loses a little, an error in a huge one loses everything after it.', c: 'for (const order of orders) {\n  try {\n    ship(order);\n  } catch (err) {\n    // skip this order, keep going\n  }\n}' },
-  vars: { t: 'Variables & state', d: '`changes` is a variable: state that survives between statements and even between ticks. commit() adds to it; deploy() pays changes² and resets it. But deploying while a bug is open rolls everything back. That is why real teams ship small, tested batches. Because deploy() pays everything at once, income comes in bursts: the $/s in the top bar is averaged over 10 seconds so you can compare programs fairly.', c: 'let changes = 0;\nchanges++;            // commit()\nif (changes >= 10) {\n  deploy();           // pays changes²\n}' },
+  vars: { t: 'Variables & state', d: '`changes` is a variable: state that survives between statements and even between ticks. commit() adds to it; deploy() pays changes² and resets it. But deploying while a bug is open rolls everything back. That is why real teams ship small, tested batches. Because deploy() pays everything at once, income comes in bursts: the $/s in the top bar is averaged over 30 seconds so you can compare programs fairly.', c: 'let changes = 0;\nchanges++;            // commit()\nif (changes >= 10) {\n  deploy();           // pays changes²\n}' },
   clientServer: { t: 'Client & server', d: 'Users (clients) send requests. Your app server runs code to answer them, and the database stores the data. Every request travels the whole path.', c: 'GET /abc123  →  app  →  SELECT url FROM links WHERE code = $1' },
   bottleneck: { t: 'Bottlenecks', d: 'A system is only as fast as its slowest part. If the database handles 60 req/s, a faster app server changes nothing. Find the red node first, then fix that.', c: 'throughput = min(app, db, …)' },
   vertical: { t: 'Vertical scaling', d: 'Buy a bigger machine: 2× capacity per size. Simple, no design changes, but there is always a biggest machine (size 4 here), the bill doubles each time, and it is still a single point of failure.', c: 'm5.large → m5.xlarge → m5.2xlarge → m5.4xlarge → the end' },
@@ -440,7 +442,7 @@ function renderTickReport(r, e, gain) {
     <ul class="tr-list">${issues.slice(0, 5).map(([k, t, tip]) => `<li class="${k}"><span>${t}</span><small>💡 ${tip}</small></li>`).join('')}</ul>`;
   const box = $('tickRepBody'); if (box.dataset.h !== html) { box.dataset.h = html; box.innerHTML = html; }
 }
-const rateBuf = []; let rateStart = performance.now();
+const RATE_WIN = 30, rateBuf = []; let rateStart = performance.now();
 let lastRun = { earned: 0, ops: 0, wasted: 0, counts: {}, halted: false };
 function updateMeters() {
   const e = env(), used = countBlocks(S.prog);
@@ -508,9 +510,9 @@ function tick() {
   lastRun = runTick(S.prog, e, S.st, Math.random);
   const gain = lastRun.earned * incomeMult();
   S.money += gain; S.total += gain;
-  // $/s shown = real average over the last 10 seconds, so one big deploy() doesn't make it jump
-  const nowT = performance.now(); rateBuf.push([nowT, gain]); while (rateBuf.length && nowT - rateBuf[0][0] > 10000) rateBuf.shift();
-  const span = Math.max(1, Math.min(10, (nowT - rateStart) / 1000)); S.rate = rateBuf.reduce((a, x) => a + x[1], 0) / span;
+  // $/s shown = real average over the last RATE_WIN seconds, so one big deploy() doesn't make it jump
+  const nowT = performance.now(); rateBuf.push([nowT, gain]); while (rateBuf.length && nowT - rateBuf[0][0] > RATE_WIN * 1000) rateBuf.shift();
+  const span = Math.max(1, Math.min(RATE_WIN, (nowT - rateStart) / 1000)); S.rate = rateBuf.reduce((a, x) => a + x[1], 0) / span;
   mainEd.showRuns(lastRun.counts, lastRun, incomeMult());
   renderTickReport(lastRun, e, gain);
   $('sEarn').textContent = money(gain); $('sBugs').textContent = S.st.bugs; $('sChg').textContent = S.st.changes; $('sOrd').textContent = S.st.orders || 0; $('ordStat').hidden = !S.unl.each; $('sWaste').textContent = fmt(lastRun.wastedOps || 0);
@@ -531,9 +533,25 @@ function tick() {
   if (!S.bugsOn && S.unl.repeat && S.total >= 60) { S.bugsOn = true; trackerKey = 'x'; renderTracker(); log('⚠ Your codebase grew. Bugs now appear!', 'e'); learn('bugs'); mainEd.render(); renderShop(true); }
   updateMeters(); renderTop();
 }
+// the top bar counts up smoothly between ticks (spending snaps down at once); $/s eases and changes at most once per second
+let dispMoney = null, dispRate = null, rateShownAt = 0, lastFrame = performance.now();
+const rateNow = () => S.co ? S.co.rev - (S.co.credits > 0 ? 0 : S.co.upk) - (S.co.loanPay || 0) : S.rate;
+function setText(el, t) { if (el.dataset.t !== t) { el.dataset.t = t; if (el.firstChild && el.firstChild.nodeType === 3 && el.id === 'money') el.firstChild.nodeValue = t; else el.textContent = t; } }
+function topFrame(now) {
+  const dt = Math.min(0.25, (now - lastFrame) / 1000); lastFrame = now;
+  if (dispMoney === null || S.money < dispMoney || !isFinite(dispMoney)) dispMoney = S.money;
+  else dispMoney += (S.money - dispMoney) * (1 - Math.exp(-dt * 6));
+  if (Math.abs(S.money - dispMoney) < Math.max(0.01, Math.abs(S.money) * 1e-4)) dispMoney = S.money;
+  setText($('money'), moneyTop(dispMoney) + ' ');
+  if (now - rateShownAt >= 1000 || dispRate === null) {
+    rateShownAt = now; const r = rateNow();
+    dispRate = dispRate === null || S.co || Math.sign(r) !== Math.sign(dispRate) ? r : dispRate + (r - dispRate) * 0.5;
+    setText($('rate'), money(dispRate) + '/s');
+  }
+  requestAnimationFrame(topFrame);
+}
+requestAnimationFrame(topFrame);
 function renderTop() {
-  $('money').firstChild.nodeValue = money(S.money) + ' ';
-  $('rate').textContent = (S.co ? money(S.co.rev - (S.co.credits > 0 ? 0 : S.co.upk) - (S.co.loanPay || 0)) : money(S.rate)) + '/s';
   $('money').classList.toggle('neg', S.money < 0);
   const cr = S.co ? S.co.credits || 0 : 0; $('credits').hidden = !(cr > 0); if (cr > 0) $('credAmt').textContent = money(cr);
   $('handVal').textContent = money(env().earnValue * incomeMult());

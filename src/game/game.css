@@ -482,3 +482,4 @@ body.in-course{overflow:hidden}
 .tr-limit span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-right:6px}
 .tr-limit b{font-size:15px}
 .tr-limit p{margin:4px 0 0;font-size:12.5px;line-height:1.45}
+.money{font-variant-numeric:tabular-nums}.money small{font-variant-numeric:tabular-nums;min-width:8ch;text-align:right}

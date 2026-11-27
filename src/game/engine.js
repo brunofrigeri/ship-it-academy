@@ -43,12 +43,13 @@ function runTick(prog, env, st, rng) {
           break;
         case 'repeat': {
           const times = Math.max(1, Math.min(n.n || 1, env.maxLoop)); if ((n.n || 1) > env.maxLoop) r.capped[n.id] = true;
-          for (let i = 0; i < times && !r.halted; i++) exec(n.body);
+          // an iteration that used no ops (empty body, only a function definition) changes nothing: skip the rest instead of spinning
+          for (let i = 0; i < times && !r.halted; i++) { const o = r.ops; exec(n.body); if (r.ops === o) break; }
           break;
         }
         case 'each': { // for (const order of orders): runs once per order waiting right now, no bits needed
           const times = Math.min(st.orders || 0, MAX_ORDERS); if (!times) { r.why.eachEmpty = (r.why.eachEmpty || 0) + 1; r.wastedOps += COST.each; }
-          for (let i = 0; i < times && !r.halted; i++) exec(n.body);
+          for (let i = 0; i < times && !r.halted; i++) { const o = r.ops; exec(n.body); if (r.ops === o) break; }
           break;
         }
         case 'ship':
