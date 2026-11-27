@@ -9,7 +9,7 @@ import importlib.util, json, pathlib
 written = []
 
 root = pathlib.Path(__file__).resolve().parents[2]
-for src in sorted((root / 'tools' / 'deep').glob('*.py')):
+for src in sorted(p for p in (root / 'tools' / 'deep').glob('*.py') if p.stem.startswith(('day', 'extras'))):
     if src.name == 'build.py': continue
     spec = importlib.util.spec_from_file_location(src.stem, src)
     mod = importlib.util.module_from_spec(spec)

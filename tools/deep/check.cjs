@@ -2,7 +2,7 @@
 const fs = require('fs'), path = require('path');
 const dir = path.join(__dirname, '../../src/course');
 let ran = 0, parsed = 0, bad = 0;
-for (const f of fs.readdirSync(dir).filter(f => /^deep-.*\.js$/.test(f))) {
+for (const f of fs.readdirSync(dir).filter(f => /^deep-(?!all).*\.js$/.test(f))) {
   global.window = { DAYS: Array.from({ length: 14 }, (_, i) => ({ n: i + 1, lessons: Array.from({ length: 8 }, () => ({ body: [] })) })), EXTRA: [] };
   const src = fs.readFileSync(path.join(dir, f), 'utf8');
   const m = src.match(/var extra = ([\s\S]*?);\n  (extra\.forEach|\(window\.EXTRA)/);

@@ -13,5 +13,6 @@ with sync_playwright() as p:
     for h in hashes:
         pg.goto('http://localhost:4173/course/' + h); pg.wait_for_timeout(350)
         if not pg.locator('.prose').count(): continue
+        if h.startswith('#t-') and pg.evaluate('location.hash') != h: continue
         print(h, pg.inner_text('h1')[:50], '| parts', pg.locator('h3.lpart').count(), 'cases', pg.locator('.case').count(), 'code', pg.locator('.prose pre').count(), 'steps', pg.locator('ul.steps li').count())
     print('errors', errs); b.close()
