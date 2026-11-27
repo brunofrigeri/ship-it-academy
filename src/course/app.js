@@ -579,8 +579,13 @@
     h += '<span class="cap">Time each day</span><div class="pills">' + PLAN_MINS.map(function (m) { return '<button class="pill' + (cfg.min === m ? ' on' : '') + '" data-pm="' + m + '">' + (m < 60 ? m + ' min' : (m / 60) + (m === 60 ? ' hour' : ' hours')) + '</button>'; }).join('') + '</div>';
     h += '<div class="field" style="margin:4px 0 0"><label for="planStart">Starts on<input type="text" id="planStart" value="' + esc(cfg.start) + '" placeholder="YYYY-MM-DD"></label></div></div>';
     h += '<div class="sheet pad"><span class="cap">Your plan</span>' + planSummaryHTML(p) + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn-pop btn-next" id="planStart_go">' + (S.plan ? 'Switch to this plan' : 'Start this plan') + '</button>' + (S.plan ? '<a class="btn-pop" href="#myplan" id="planCancel">Keep my current plan</a>' : '') + '</div>' + (S.plan ? '<p class="muted" style="margin:8px 0 0">Lessons you already finished stay checked in the new plan.</p>' : '') + '</div>';
-    h += '<div><h3 style="margin:18px 0 8px;font-size:15px">Preview</h3>' + p.days.slice(0, 3).map(function (d, i) { return planDayHTML(d, 0, i === 0); }).join('') + (p.days.length > 3 ? '<p class="muted">… and ' + (p.days.length - 3) + ' more days.</p>' : '') + '</div>';
+    h += '<div><h3 style="margin:18px 0 4px;font-size:15px">The full plan, day by day</h3><p class="muted" style="margin:0 0 4px">Every day of the plan, with its lessons. <button class="linkbtn" id="planExpand" data-open="1">Close all days</button></p>' + planWeeksHTML(p, 0, -1) + '</div>';
     return wrap(h);
+  }
+  function planWeeksHTML(p, today, openN) {
+    var weeks = [], h = ''; p.days.forEach(function (d) { var w = Math.floor((d.n - 1) / 7); (weeks[w] = weeks[w] || []).push(d); });
+    weeks.forEach(function (w, i) { var m = w.reduce(function (s, d) { return s + (d.review ? 0 : d.items.reduce(function (a, it) { return a + it.min; }, 0)); }, 0); h += '<h3 class="pweek">Week ' + (i + 1) + '<span>' + w.reduce(function (s, d) { return s + d.items.length; }, 0) + ' items · ' + (Math.round(m / 6) / 10) + ' h</span></h3>' + w.map(function (d) { return planDayHTML(d, today, openN === -1 || d.n === openN); }).join(''); });
+    return h;
   }
   function myPlanPage(edit) {
     if (!S.plan || edit) return planSetupHTML();
@@ -591,12 +596,12 @@
     var status = today < 1 ? 'Starts ' + fmtDay(p.cfg.start) + '.' : today > p.cfg.days ? (pct === 100 ? 'Plan complete. Well done.' : 'The plan has ended; ' + (all.length - doneN) + ' items are still open.') : 'Day ' + today + ' of ' + p.cfg.days + '.' + (dueN ? ' ' + dueN + ' item' + (dueN === 1 ? '' : 's') + ' from earlier days to catch up.' : ' You are on track.');
     var h = '<div><h1>My study plan</h1><p class="lead">' + esc(p.focus.name) + ' in ' + p.cfg.days + ' days, about ' + p.perDay + ' minutes a day. ' + esc(status) + '</p></div>';
     h += '<div class="sheet pad"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="cap">Progress</span><b>' + doneN + ' of ' + all.length + ' items · ' + pct + '%</b></div><div class="bar" style="margin-top:8px"><i style="width:' + pct + '%"></i></div>' + planSummaryHTML(p) + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><a class="btn-pop" href="#myplan-edit">Change plan</a><button class="btn-pop" id="planEnd">End this plan</button></div></div>';
-    var openN = today >= 1 && today <= p.cfg.days ? today : 0;
-    var weeks = []; p.days.forEach(function (d) { var w = Math.floor((d.n - 1) / 7); (weeks[w] = weeks[w] || []).push(d); });
-    weeks.forEach(function (w, i) { h += '<h3 class="pweek">Week ' + (i + 1) + '</h3>' + w.map(function (d) { return planDayHTML(d, today, d.n === openN); }).join(''); });
+    h += '<p class="muted" style="margin:16px 0 0"><button class="linkbtn" id="planExpand">Open all days</button></p>';
+    h += planWeeksHTML(p, today, today >= 1 && today <= p.cfg.days ? today : 0);
     return wrap(h);
   }
   document.addEventListener('click', function (e) {
+    var x = e.target.closest('#planExpand'); if (x) { var ds = document.querySelectorAll('details.pday'), open = x.dataset.open !== '1'; ds.forEach(function (d) { d.open = open; }); x.dataset.open = open ? '1' : ''; x.textContent = open ? 'Close all days' : 'Open all days'; return; }
     var t = e.target.closest('[data-pd],[data-pf],[data-pm],#planStart_go,#planEnd'); if (!t) return;
     var d = S.planDraft = planDraft(), sv = document.getElementById('planStart');
     if (sv && /^\d{4}-\d{2}-\d{2}$/.test(sv.value.trim())) d.start = sv.value.trim();
