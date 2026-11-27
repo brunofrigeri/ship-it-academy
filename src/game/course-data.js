@@ -3,9 +3,9 @@ import '../course/content-1.js';
 import '../course/content-2.js';
 import '../course/content-3.js';
 import '../course/content-4.js';
-import '../course/deep-1.js';
 import '../course/extras.js';
 import '../course/extras-ai.js';
+import '../course/deep-all.js';
 import '../course/names.js';
 
 const clean = body => body.filter(b => typeof b === 'string' || !(b.diagram || b.widget));

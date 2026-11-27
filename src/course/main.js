@@ -20,6 +20,6 @@ import './content-1.js';
 import './content-2.js';
 import './content-3.js';
 import './content-4.js';
-import './deep-1.js';
+import './deep-all.js';
 import './names.js';
 import './app.js';
