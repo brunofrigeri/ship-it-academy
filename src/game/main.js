@@ -71,9 +71,9 @@ const CONCEPTS = {
   bugs: { t: 'Bugs', d: 'Every earn() and commit() can introduce a real defect, like `TypeError: cart.total is undefined`. While any bug is open, earn() pays $0 and deploy() rolls back. fix() patches the oldest open bug for 4 ops; running it when nothing is broken wastes them.', c: 'earn();  // may throw: cart.total is undefined\nfix();   // patches the oldest bug (4 ops)' },
   if: { t: 'Conditionals', d: 'if/else lets the program react to state. Only pay for fix() when there actually is a bug. Checking a condition is cheap (1 op); doing unnecessary work is expensive.', c: 'if (bugs > 0) {\n  fix();\n} else {\n  earn();\n}' },
   func: { t: 'Functions', d: 'A function gives a name to a group of statements. Define it once with `function helper() { }`, then call `helper()` from anywhere: inside loops, in both branches of an if, even from another function. The body is stored once, so every extra call costs just 1 block of memory. A function that calls itself forever never returns: that is a stack overflow, and here it halts the tick.', c: 'function helper() {\n  if (bugs > 0) fix();\n  else earn();\n}\nhelper();\nhelper();' },
-  arrays: { t: 'Arrays & iteration', d: 'Customers now place orders, and they pile up in an array: `orders`. ship() takes one order off the array and pays 5× earn(). A repeat loop runs a fixed number of times (wasting ops when there are fewer orders), but `for (const order of orders)` runs exactly once per item, however many there are. Iterating over data, not a hard-coded count, is how real programs handle lists. The array holds at most 40 orders; new orders beyond that are lost.', c: 'const orders = [o1, o2, o3];\nfor (const order of orders) {\n  ship(order); // runs 3 times\n}' },
+  arrays: { t: 'Arrays & iteration', d: 'Customers now place orders, and they pile up in an array: `orders`. ship() takes one order off the array and pays 5× earn(). A repeat loop runs a fixed number of times (wasting ops when there are fewer orders), but `for (const order of orders)` runs exactly once per item, however many there are. Iterating over data, not a hard-coded count, is how real programs handle lists. The array holds at most 40 orders; new orders beyond that are lost. Orders, not the CPU, limit ship(): once every order is shipped, extra ship() calls just waste ops, so spend spare ops on earn() and buy More customers for more orders.', c: 'const orders = [o1, o2, o3];\nfor (const order of orders) {\n  ship(order); // runs 3 times\n}' },
   trycatch: { t: 'Error handling', d: 'try { } catch { } turns a crash into something you handle. If a bug happens inside try, it is thrown as an exception: the rest of the try body is skipped, that unit of work pays nothing, and the catch body runs instead. The bug never reaches the tracker, so nothing gets blocked. Wrap small units of work: an error in a tiny try loses a little, an error in a huge one loses everything after it.', c: 'for (const order of orders) {\n  try {\n    ship(order);\n  } catch (err) {\n    // skip this order, keep going\n  }\n}' },
-  vars: { t: 'Variables & state', d: '`changes` is a variable: state that survives between statements and even between ticks. commit() adds to it; deploy() pays changes² and resets it. But deploying while a bug is open rolls everything back. That is why real teams ship small, tested batches.', c: 'let changes = 0;\nchanges++;            // commit()\nif (changes >= 10) {\n  deploy();           // pays changes²\n}' },
+  vars: { t: 'Variables & state', d: '`changes` is a variable: state that survives between statements and even between ticks. commit() adds to it; deploy() pays changes² and resets it. But deploying while a bug is open rolls everything back. That is why real teams ship small, tested batches. Because deploy() pays everything at once, income comes in bursts: the $/s in the top bar is averaged over 10 seconds so you can compare programs fairly.', c: 'let changes = 0;\nchanges++;            // commit()\nif (changes >= 10) {\n  deploy();           // pays changes²\n}' },
   clientServer: { t: 'Client & server', d: 'Users (clients) send requests. Your app server runs code to answer them, and the database stores the data. Every request travels the whole path.', c: 'GET /abc123  →  app  →  SELECT url FROM links WHERE code = $1' },
   bottleneck: { t: 'Bottlenecks', d: 'A system is only as fast as its slowest part. If the database handles 60 req/s, a faster app server changes nothing. Find the red node first, then fix that.', c: 'throughput = min(app, db, …)' },
   vertical: { t: 'Vertical scaling', d: 'Buy a bigger machine: 2× capacity per size. Simple, no design changes, but there is always a biggest machine (size 4 here), the bill doubles each time, and it is still a single point of failure.', c: 'm5.large → m5.xlarge → m5.2xlarge → m5.4xlarge → the end' },
@@ -136,7 +136,7 @@ const UNL = [
   { id: 'try', name: 'try { } catch { }', concept: 'trycatch', price: 1000000, ch: 'c9', d: 'Error handling: catch bugs before they block you.', show: () => S.unl.each },
   { id: 'commit', name: 'commit() / deploy()', concept: 'vars', price: 5000000, ch: 'c4', d: 'State: batch changes, deploy pays changes².', show: () => S.unl.try },
 ];
-const START_PRICE = 1e12; // minimum to found the first startup
+const START_PRICE = 1e9; // minimum to found the first startup
 
 /* ---------- blocks ---------- */
 const BDEF = {
@@ -410,6 +410,17 @@ function renderTickReport(r, e, gain) {
   const m = incomeMult(), parts = [['earn()', r.from.earn], ['ship()', r.from.ship], ['deploy()', r.from.deploy]].filter(p => p[1] > 0);
   const opsTypes = Object.entries(r.opsType).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([t, v]) => `${BDEF[t] ? BDEF[t].label : t} ${fmt(v)}`).join(' · ');
   const issues = [], w = r.why || {};
+  const spare = e.cpu - r.ops, workOps = ['earn', 'ship', 'commit', 'deploy', 'fix'].reduce((a, t) => a + (r.opsType[t] || 0), 0) - r.wastedOps, ctrlOps = Math.max(0, r.ops - workOps - r.wastedOps);
+  let limit = null;
+  if (!S.prog.length) limit = ['Nothing yet', 'Your program is empty.'];
+  else if (w.blocked) limit = ['Bugs', `Open bugs made ${fmt(w.blocked)} block${w.blocked > 1 ? 's' : ''} pay $0. Fixing them is the fastest win.`];
+  else if (r.haltAt && ctrlOps > workOps) limit = ['CPU, spent on checks', `Only <b>${fmt(workOps)} of ${fmt(e.cpu)} ops</b> did real work (earn, ship, commit, deploy, fix). <b>${fmt(ctrlOps)}</b> went to control flow: if checks, try, helper() calls and loops. ${e.orderRate && !(S.st.orders > 0) ? `Once the ${fmt(e.orderRate)} orders of this tick are shipped, every extra helper() call is pure overhead. Call it once, and fill the loop with earn() instead.` : 'Move checks out of big loops so the ops go to work.'}`];
+  else if (r.haltAt) limit = ['CPU', `All ${fmt(e.cpu)} ops were used${r.wastedOps ? `, ${fmt(r.wastedOps)} of them on nothing` : ''}. ${r.wastedOps ? 'Remove the waste first, then buy Better CPU.' : 'Buy Better CPU, or make each op pay more (Faster typing).'}`];
+  else if (e.orderRate && r.shipped > 0 && !(S.st.orders > 0)) limit = ['Orders', `Only ${fmt(e.orderRate)} order${e.orderRate === 1 ? '' : 's'} arrive per tick, and you shipped every one. Calling ship() more cannot help. ${spare > 0 ? `You still have <b>${fmt(spare)} spare ops</b>: spend them on earn() (in a repeat), or buy More customers.` : 'Buy More customers.'}`];
+  else if (spare > 0) limit = ['Your code', `<b>${fmt(spare)} of ${fmt(e.cpu)} ops</b> were never used. Raise a repeat count, nest a loop, or add blocks (memory ${countBlocks(S.prog)}/${memMax()}).`];
+  const flow = [];
+  if (S.unl.each) flow.push(`📦 Orders: +${fmt(r.arrived || 0)} arrived → ${fmt(r.shipped || 0)} shipped → ${fmt(S.st.orders || 0)} waiting <span class="lvl">(each ship() = 2 ops, pays ${money(e.orderValue * m)})</span>`);
+  if (S.unl.commit) flow.push(`🧾 Changes: ${fmt(S.st.changes)} / ${fmt(e.maxChanges)} → a deploy() now would pay ${money(S.st.changes * S.st.changes * e.deployValue * m)}${r.deploys ? ` · <b>deployed this tick</b>` : ' · income arrives in bursts, at each deploy'}`);
   if (r.haltAt) issues.push(['bad', `⏹ The CPU ran out at <b>${nodeT(r.haltAt)}</b> (marked in red). Everything after it was skipped this tick.`, r.wastedOps ? 'Cut the wasted ops below first; then buy Better CPU.' : 'Buy Better CPU for more ops per tick.']);
   if (w.eachEmpty) issues.push(['warn', `🔁 <b>for (order of orders)</b> ran ${fmt(w.eachEmpty)}× on an empty array, using ${fmt(w.eachEmpty)} op${w.eachEmpty > 1 ? 's' : ''} for nothing.`, `Only ${fmt(e.orderRate)} order${e.orderRate === 1 ? '' : 's'} arrive per tick, and one for loop already ships them all. Run it once per tick, not inside a repeat. More customers = more orders.`]);
   if (w.shipEmpty) issues.push(['warn', `📦 <b>ship()</b> ran ${fmt(w.shipEmpty)}× with no orders waiting (${fmt(w.shipEmpty * 2)} ops wasted).`, 'Put ship() inside for (order of orders) so it runs exactly once per order.']);
@@ -422,13 +433,14 @@ function renderTickReport(r, e, gain) {
   if (w.noFunc) issues.push(['warn', `❓ helper() was called, but there is no function helper() in your program.`, 'Add function helper() { } and put blocks inside it.']);
   if (r.overflow > 0) issues.push(['warn', `📭 ${fmt(r.overflow)} order${r.overflow > 1 ? 's were' : ' was'} lost: the orders array is full (40).`, 'Ship faster: a for (order of orders) loop with ship() inside.']);
   if (!S.prog.length) issues.push(['bad', '📭 Your program is empty, so nothing runs.', 'Add an earn() block.']);
-  if (!issues.length && r.ops < e.cpu && S.prog.length) issues.push(['good', `✓ No waste. You still have ${fmt(e.cpu - r.ops)} spare ops each tick.`, 'Use them: raise a repeat count or add more work.']);
+  if (!issues.length && r.ops < e.cpu && S.prog.length) issues.push(['good', '✓ No wasted ops.', 'The line above says what to improve next.']);
   else if (!issues.length) issues.push(['good', '✓ No waste: every op earned something.', 'To earn more: Faster typing (pay per block), Better CPU (more ops), Overclock (more ticks per second).']);
-  const html = `<div class="tr-line"><b>${money(gain)}</b> this tick${parts.length ? ' = ' + parts.map(([k, v]) => `${k} ${money(v * m)}`).join(' + ') : ''}${m !== 1 && parts.length ? ` <span class="lvl">(includes ×${fmt(m)} bonus)</span>` : ''}</div>
-    <div class="tr-line">⚙️ ${fmt(r.ops)}/${fmt(e.cpu)} ops used${opsTypes ? ': ' + opsTypes : ''}${r.wastedOps ? ` · <b class="tr-bad">${fmt(r.wastedOps)} wasted</b>` : ''}</div>
+  const html = `${limit ? `<div class="tr-limit"><span>Limited by</span><b>${limit[0]}</b><p>${limit[1]}</p></div>` : ''}<div class="tr-line"><b>${money(gain)}</b> this tick${parts.length ? ' = ' + parts.map(([k, v]) => `${k} ${money(v * m)}`).join(' + ') : ''}${m !== 1 && parts.length ? ` <span class="lvl">(includes ×${fmt(m)} bonus)</span>` : ''}</div>
+    <div class="tr-line">⚙️ ${fmt(r.ops)}/${fmt(e.cpu)} ops used: <b>${fmt(workOps)} work</b> · ${fmt(ctrlOps)} control flow${opsTypes ? ` <span class="lvl">(${opsTypes})</span>` : ''}${r.wastedOps ? ` · <b class="tr-bad">${fmt(r.wastedOps)} wasted</b>` : ''}</div>${flow.map(f => `<div class="tr-line">${f}</div>`).join('')}
     <ul class="tr-list">${issues.slice(0, 5).map(([k, t, tip]) => `<li class="${k}"><span>${t}</span><small>💡 ${tip}</small></li>`).join('')}</ul>`;
   const box = $('tickRepBody'); if (box.dataset.h !== html) { box.dataset.h = html; box.innerHTML = html; }
 }
+const rateBuf = []; let rateStart = performance.now();
 let lastRun = { earned: 0, ops: 0, wasted: 0, counts: {}, halted: false };
 function updateMeters() {
   const e = env(), used = countBlocks(S.prog);
@@ -496,7 +508,9 @@ function tick() {
   lastRun = runTick(S.prog, e, S.st, Math.random);
   const gain = lastRun.earned * incomeMult();
   S.money += gain; S.total += gain;
-  S.rate = S.rate * 0.8 + gain * tps() * 0.2;
+  // $/s shown = real average over the last 10 seconds, so one big deploy() doesn't make it jump
+  const nowT = performance.now(); rateBuf.push([nowT, gain]); while (rateBuf.length && nowT - rateBuf[0][0] > 10000) rateBuf.shift();
+  const span = Math.max(1, Math.min(10, (nowT - rateStart) / 1000)); S.rate = rateBuf.reduce((a, x) => a + x[1], 0) / span;
   mainEd.showRuns(lastRun.counts, lastRun, incomeMult());
   renderTickReport(lastRun, e, gain);
   $('sEarn').textContent = money(gain); $('sBugs').textContent = S.st.bugs; $('sChg').textContent = S.st.changes; $('sOrd').textContent = S.st.orders || 0; $('ordStat').hidden = !S.unl.each; $('sWaste').textContent = fmt(lastRun.wastedOps || 0);

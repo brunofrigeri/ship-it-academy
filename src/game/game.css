@@ -477,3 +477,8 @@ body.in-course{overflow:hidden}
 .tr-list small{color:var(--muted);font-size:12px}
 .blk.halt{outline:2px solid var(--bad,#d93f3f);outline-offset:2px}
 .blk.halt>.bh::after{content:'⏹ CPU ran out here';margin-left:8px;font-size:11px;font-weight:800;color:var(--bad,#d93f3f);white-space:nowrap}
+
+.tr-limit{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--yellow,#fff4c7);border:1px solid var(--ink)}
+.tr-limit span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-right:6px}
+.tr-limit b{font-size:15px}
+.tr-limit p{margin:4px 0 0;font-size:12.5px;line-height:1.45}
