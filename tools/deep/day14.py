@@ -1,0 +1,95 @@
+DAY = 14
+
+L0 = [
+  {'part': 'read'},
+  "Interviewers are not only checking whether your design works. They are asking: would I trust this person to lead a design discussion on my team? That is judged from how you structure the conversation, how you handle uncertainty and pushback, and whether every decision comes with a reason and a cost.",
+  {'h': 'Sentences that do a lot of work'},
+  {'table': {'head': ['Moment', 'Say something like'], 'rows': [
+    ['Opening', '"Let me spend a few minutes on requirements and scale, sketch a simple design end to end, then go deep where you’d like."'],
+    ['Making an assumption', '"I’ll assume 10 million daily users and a 10:1 read/write ratio; tell me if you’d like a different scale."'],
+    ['Choosing', '"I’ll use a queue here because it lets checkout succeed even if email is down; the cost is that emails can be delayed and must be idempotent."'],
+    ['Checking in', '"Does this level of detail work, or would you rather I go deeper on storage?"'],
+    ['Pushback', '"Good point. If the hot key gets 50K writes a second, a single row won’t hold; I’d shard the counter and sum on read."'],
+    ['Running out of time', '"In the remaining minutes, let me cover how this fails and what I’d monitor."']]}},
+  {'h': 'After the interview: practise like it counts'},
+  "Record yourself designing a system aloud for 40 minutes, then listen back. Most people discover they spend too long on requirements, never state numbers, or describe boxes without saying why. Two or three recorded sessions fix more than ten silent read-throughs.",
+  {'part': 'real'},
+  {'case': {'who': 'Amazon', 'when': '2017 shareholder letter', 'title': 'Six-page narratives instead of slides',
+    'body': ["In his 2017 letter to shareholders, Jeff Bezos explained that Amazon does not use slide presentations in meetings; teams write narratively structured six-page memos that everyone reads silently at the start. He wrote that the best memos take a week or more, are rewritten and shared with colleagues for improvement, and that weak memos usually come from underestimating that scope rather than from lacking skill."],
+    'lesson': 'Clear design thinking is clear writing. Practise writing a design up in prose: it exposes gaps a diagram hides, in interviews and at work.',
+    'src': [['2017 Letter to Shareholders (Amazon)', 'https://www.aboutamazon.com/company-news/2017-letter-to-shareholders/']]}},
+  {'part': 'apply'},
+  {'code': "# Design: <system>   (fill this in for every practice problem, in under 1 page)\n\n## Requirements\n- Must: ...            - Out of scope: ...\n- Scale: DAU, reads/s, writes/s, data size per year, latency target\n\n## High-level design\n- Request path for the main read and the main write (numbered)\n\n## Data model and storage\n- Entities, keys, which store and why, how it is partitioned\n\n## Deep dive (pick 1-2)\n- The hardest part, with the trade-off you chose and what it costs\n\n## Failure and operations\n- What breaks first at 10x, how it degrades, what you monitor and alert on\n\n## What I would do next\n- v2 features, cost reductions, open questions", 'lang': 'md', 'cap': 'A one-page template for practice write-ups'},
+  {'check': ['Practise the opening sentence until it is automatic.', 'State every assumption with a number and invite correction.', 'Attach a reason and a cost to each component you add.', 'Record two practice sessions and listen back.', 'Write one design up as a one-page narrative.', 'End every practice with failure modes and monitoring.']},
+]
+
+L1 = [
+  {'part': 'read'},
+  "A checklist is only useful if you can run it quickly. The fastest way to make the master checklist yours is to run it against systems you use every day and see which questions you cannot answer yet. Each blank is your next topic to study.",
+  {'h': 'Estimation in two minutes'},
+  "Most designs need four numbers: requests per second (average and peak), storage per year, bandwidth, and the size of the hot working set for caching. Use 100,000 seconds per day (it is 86,400, close enough), assume peak is 2 to 3 times average, and round aggressively. The point is the order of magnitude: does this fit on one database, or does it need sharding?",
+  {'table': {'head': ['Result', 'Usually means'], 'rows': [
+    ['Under 1,000 writes/s', 'A single well-indexed primary database is fine'],
+    ['10,000+ writes/s', 'Batching, a queue, or sharding'],
+    ['Under 100 GB hot data', 'Fits in a cache cluster or even one large machine’s memory'],
+    ['Many TB per year', 'Object storage, tiering, retention policy'],
+    ['100K+ reads/s on few keys', 'Caching plus replicas; watch for hot keys']]}},
+  {'part': 'real'},
+  {'case': {'who': 'Dan Luu (and contributors)', 'when': 'ongoing', 'title': 'A collection of public postmortems',
+    'body': ["Dan Luu maintains a public list of postmortems from many companies, grouped by cause: configuration errors, hardware failures, database problems, time-related bugs and more. Reading a handful shows the same patterns again and again: a bad config pushed everywhere at once, retries amplifying an outage, a dependency nobody knew was critical. These are the 'failure' rows of the checklist in practice."],
+    'lesson': 'The checklist’s failure questions are not theoretical. Read real postmortems to learn what actually breaks.',
+    'src': [['A collection of postmortems (GitHub)', 'https://github.com/danluu/post-mortems']]}},
+  {'part': 'apply'},
+  {'code': "// Back-of-envelope estimator: change the inputs for any design\nfunction estimate({ dau, readsPerUser, writesPerUser, bytesPerWrite, peak = 3, replicas = 3, years = 1 }) {\n  const day = 86_400;\n  const r = dau * readsPerUser / day, w = dau * writesPerUser / day;\n  const storage = dau * writesPerUser * bytesPerWrite * 365 * years * replicas;\n  const fmt = b => b >= 1e12 ? (b / 1e12).toFixed(1) + ' TB' : (b / 1e9).toFixed(1) + ' GB';\n  return {\n    'reads/s (avg, peak)': `${Math.round(r)}, ${Math.round(r * peak)}`,\n    'writes/s (avg, peak)': `${Math.round(w)}, ${Math.round(w * peak)}`,\n    [`storage for ${years}y x${replicas} replicas`]: fmt(storage),\n  };\n}\nconsole.log('Social app:', estimate({ dau: 10e6, readsPerUser: 20, writesPerUser: 2, bytesPerWrite: 1_000 }));\nconsole.log('URL shortener:', estimate({ dau: 1e6, readsPerUser: 10, writesPerUser: 0.1, bytesPerWrite: 500, years: 5 }));", 'lang': 'js', 'cap': 'Run it: the four numbers in seconds'},
+  {'check': ['Run the checklist against an app you use daily and note the blanks.', 'Estimate reads/s, writes/s and storage for three practice systems.', 'Read five postmortems and name the checklist row each one maps to.', 'Keep a one-page version of the checklist for revision.', 'For each row, know one default choice and one alternative.', 'Practise saying the estimates aloud in under two minutes.']},
+]
+
+L2 = [
+  {'part': 'read'},
+  "Each of the four harder designs has one problem that dominates: contention (ticketing), correctness (payments), real-time geography (ride hailing), and convergence (collaborative documents). Interviewers move quickly to that problem, so name it in your first two minutes and design around it.",
+  {'h': 'The dominant problem, and the core move'},
+  {'table': {'head': ['Design', 'Dominant problem', 'Core move'], 'rows': [
+    ['Ticketing', 'Huge bursts competing for a few rows', 'Waiting room to meter traffic; short seat holds with an atomic conditional update; bot defence'],
+    ['Payments', 'Never lose or duplicate money', 'Idempotency keys; double-entry ledger; reconciliation with the payment provider'],
+    ['Ride hailing', 'Fast nearest-driver queries on moving points', 'In-memory geo index by cell (geohash, S2, H3); match within nearby cells; location updates fire-and-forget'],
+    ['Collaborative docs', 'Concurrent edits must converge', 'Operations ordered by a server, OT or CRDT, local echo, snapshots plus operation log']]}},
+  {'part': 'real'},
+  {'case': {'who': 'Ticketmaster', 'when': 'November 2022', 'title': 'The Eras Tour presale',
+    'body': ["Ticketmaster said that more than 3.5 million people pre-registered for the Taylor Swift Eras Tour Verified Fan presale, the largest registration in its history. On the day, a staggering number of bot attacks and fans without codes drove 3.5 billion total system requests, four times its previous peak, and fans faced long queues and errors. The general public sale was cancelled."],
+    'lesson': 'For ticketing, plan for traffic far beyond real buyers. Meter entry with a waiting room, reject bots and uninvited traffic at the edge, and protect the inventory database.',
+    'src': [['Taylor Swift | The Eras Tour Onsale Explained (Ticketmaster)', 'https://business.ticketmaster.com/press-release/taylor-swift-the-eras-tour-onsale-explained/']]}},
+  {'case': {'who': 'Stripe', 'when': '2017', 'title': 'Idempotency keys',
+    'body': ["Stripe's post on robust APIs explains that because networks fail, a client often cannot know whether a request to charge a card succeeded. Stripe's API accepts an `Idempotency-Key` header on POST requests, so a client can safely retry with the same key and the customer is charged only once. The post pairs this with retries using exponential backoff and jitter."],
+    'lesson': 'Any operation that moves money must be safe to retry. Make the client send a key and make the server remember the result.',
+    'src': [['Designing robust and predictable APIs with idempotency (Stripe)', 'https://stripe.com/blog/idempotency']]}},
+  {'case': {'who': 'Uber', 'when': '2018', 'title': 'H3: a hexagonal grid for the whole planet',
+    'body': ["Uber built and open-sourced H3, a hierarchical grid that divides the Earth into hexagonal cells at many resolutions. Events such as ride requests and driver locations are bucketed into cells, which Uber uses for analysis and decisions such as dynamic pricing and dispatch. Hexagons were chosen partly because every neighbour is the same distance away, which simplifies looking at nearby cells."],
+    'lesson': 'Turn geography into cell IDs and you can use ordinary keys, maps and shards for spatial problems.',
+    'src': [['H3: Uber’s Hexagonal Hierarchical Spatial Index', 'https://www.uber.com/blog/h3/']]}},
+  {'part': 'apply'},
+  {'code': "// Ticketing: atomic conditional holds mean no seat is ever sold twice\nconst seats = new Map();                                   // seatId -> { holder, expires }\nfunction tryHold(seat, user, now, ttl = 600) {             // like: UPDATE ... WHERE holder IS NULL OR expires < now\n  const s = seats.get(seat);\n  if (s && s.expires > now) return false;\n  seats.set(seat, { holder: user, expires: now + ttl });\n  return true;\n}\nlet x = 7; const rand = n => (x = (x * 1103515245 + 12345) % 2 ** 31) % n;   // repeatable\nlet granted = 0, rejected = 0;\nfor (let u = 0; u < 5000; u++) tryHold(rand(200), u, 0) ? granted++ : rejected++;\nconst holders = [...seats.values()].map(s => s.holder);\nconsole.log(`5000 buyers, 200 seats: granted ${granted}, rejected ${rejected}, seats held twice: ${holders.length - new Set(holders).size === 0 && granted === seats.size ? 0 : 'BUG'}`);\n\n// Payments: double-entry ledger, every transfer sums to zero\nconst ledger = [];\nfunction transfer(id, from, to, cents) {\n  if (ledger.some(e => e.id === id)) return 'duplicate ignored';   // idempotency key\n  ledger.push({ id, account: from, cents: -cents }, { id, account: to, cents });\n  return 'ok';\n}\nconsole.log(transfer('t1', 'alice', 'bob', 2500), transfer('t1', 'alice', 'bob', 2500), transfer('t2', 'bob', 'shop', 1000));\nconst balance = a => ledger.filter(e => e.account === a).reduce((s, e) => s + e.cents, 0);\nconsole.log('alice', balance('alice'), 'bob', balance('bob'), 'shop', balance('shop'), 'total', ledger.reduce((s, e) => s + e.cents, 0));", 'lang': 'js', 'cap': 'Run it: contention and correctness in miniature'},
+  {'check': ['For each design, say the dominant problem in one sentence.', 'Ticketing: design the waiting room, the hold, expiry and bot defence.', 'Payments: draw the ledger tables and the idempotency flow, then reconciliation.', 'Ride hailing: explain cell-based lookup and how you handle cell borders.', 'Docs: explain local echo, server ordering and snapshots.', 'Time yourself: 35 minutes per design, aloud.']},
+]
+
+L3 = [
+  {'part': 'read'},
+  "You will forget most of this within a month unless you revisit it. Spaced repetition beats rereading: come back to each topic after 1, 3, 7, 14 and 30 days, and each time try to recall and design before you look. Then deepen with three habits: read engineering blogs and postmortems, build small versions of the systems, and explain them to someone else.",
+  {'h': 'A 4-week plan after the course'},
+  {'table': {'head': ['Week', 'Do'], 'rows': [
+    ['1', 'One practice design every other day, aloud and timed. Read two postmortems.'],
+    ['2', 'Build something small: a rate limiter, a URL shortener with a cache, or a chat server with WebSockets. Load-test it and find what breaks.'],
+    ['3', 'Read one long paper or classic post a week (Dynamo, Bigtable, Kafka’s design, Google Docs OT). Write a half-page summary.'],
+    ['4', 'Two mock interviews with a friend or peer, giving and receiving feedback with the checklist. Revisit your weakest checklist rows.']]}},
+  {'h': 'Keep the game useful'},
+  "The Ship It game models the same trade-offs: CPU and memory limits, caches, load balancers, queues, incidents at scale. When a concept feels abstract, build it in a startup and watch where it breaks. Then read the lesson again; it will make more sense.",
+  {'part': 'real'},
+  {'case': {'who': 'Amazon (DeCandia et al.)', 'when': '2007', 'title': 'The Dynamo paper',
+    'body': ["Amazon's Dynamo paper described the highly available key-value store behind parts of its shopping cart, combining consistent hashing, replication with sloppy quorums, vector clocks for versioning and anti-entropy with Merkle trees. It influenced Cassandra, Riak and DynamoDB-era thinking. It is a good first paper because nearly every technique in it appears in this course."],
+    'lesson': 'Classic papers tie many concepts into one real system. Reading one after this course shows how far you have come.',
+    'src': [['Dynamo: Amazon’s Highly Available Key-value Store (All Things Distributed)', 'https://www.allthingsdistributed.com/2007/10/amazons_dynamo.html']]}},
+  {'part': 'apply'},
+  {'code': "// Your review calendar: revisit each course day after 1, 3, 7, 14 and 30 days\nconst start = new Date(Date.UTC(2026, 11, 1));          // the day you finish the course: change it\nconst gaps = [1, 3, 7, 14, 30];\nconst fmt = d => d.toISOString().slice(5, 10);\nfor (const day of [1, 5, 10, 14]) {\n  const studied = new Date(start); studied.setUTCDate(studied.getUTCDate() - (14 - day));\n  const reviews = gaps.map(g => { const r = new Date(studied); r.setUTCDate(r.getUTCDate() + g); return fmt(r); });\n  console.log(`Day ${String(day).padStart(2)} (studied ${fmt(studied)}): review on ${reviews.join(', ')}`);\n}", 'lang': 'js', 'cap': 'Run it: a spaced-repetition schedule'},
+  {'check': ['Put review dates for each course day in your calendar.', 'Recall and sketch before rereading at every review.', 'Build and load-test one small system.', 'Read one classic paper and summarise it in half a page.', 'Do two mock interviews with feedback.', 'Return to the game and build the system you find hardest.']},
+]
+
+LESSONS = [L0, L1, L2, L3]
