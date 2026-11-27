@@ -14,3 +14,4 @@ import './deep-7.js';
 import './deep-8.js';
 import './deep-9.js';
 import './deep-extras1.js';
+import './deep-extras2.js';
