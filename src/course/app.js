@@ -103,7 +103,7 @@
   }
 
   /* ---------- chrome ---------- */
-  var TABS = [['learn', 'Lessons', 'book'], ['plan', 'Roadmap', 'plan'], ['practice', 'Drills', 'target'], ['labs', 'Sandbox', 'flask'], ['ex', 'Mock rounds', 'flag'], ['review', 'Recall', 'cards'], ['cheat', 'Quick refs', 'sheet']];
+  var TABS = [['learn', 'Lessons', 'book'], ['plan', 'Roadmap', 'plan'], ['myplan', 'My plan', 'clock'], ['practice', 'Drills', 'target'], ['labs', 'Sandbox', 'flask'], ['ex', 'Mock rounds', 'flag'], ['review', 'Recall', 'cards'], ['cheat', 'Quick refs', 'sheet']];
   var LOGO = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="3" width="28" height="26" rx="9" fill="var(--pri)"/><path d="M9.5 12.5l4.5 3.5-4.5 3.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M16.5 20h6" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle cx="25" cy="8" r="4" fill="var(--acc)" stroke="var(--paper)" stroke-width="1.6"/></svg>';
   function theme() { return S.theme || (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); }
   /* When the course runs on top of the game (same site, inside the game page), "Game" just hides the course. */
@@ -113,9 +113,10 @@
   function applyTheme() { document.documentElement.setAttribute('data-theme', theme()); }
   window.addEventListener('message', function (e) { var d = e.data; if (e.origin !== location.origin || !d || d.ship !== 'theme' || (d.theme !== 'dark' && d.theme !== 'light')) return; S.theme = d.theme; save(); applyTheme(); var b = document.getElementById('themeBtn'); if (b) b.innerHTML = I(S.theme === 'dark' ? 'sun' : 'moon', 15); });
 
+  function planChip() { if (!S.plan) return ''; var k = daysBetween(S.plan.start, ymd(new Date())) + 1; return k >= 1 && k <= S.plan.days ? '<a class="chip-day" href="#myplan">' + I('clock', 13) + ' Plan day ' + k + ' of ' + S.plan.days + '</a>' : ''; }
   function topHTML(tab) {
     var tn = todayN();
-    return '<header class="top"><button class="iconbtn menubtn" id="menuBtn" aria-label="Course menu" style="display:none">' + I('sheet', 15) + '</button><a class="brand" href="#learn">' + LOGO + '<span>ship_it() <mark>Academy</mark></span></a><nav class="appsw" aria-label="Switch between game and course"><a href="' + window.SITE.routes.game + '" data-togame>⚡ Game</a><a class="on" href="' + window.SITE.routes.course + '" aria-current="page">🎓 Course</a></nav><nav class="tabs">' + TABS.map(function (t) { return '<a class="tab' + (t[0] === tab ? ' on' : '') + (t[0] === 'play' ? ' tab-play' : '') + '" href="#' + t[0] + '">' + I(t[2], 14) + '<span>' + t[1] + '</span></a>'; }).join('') + '</nav><span class="sp"></span><button class="search" id="openSearch">' + I('search', 14) + '<span>Search lessons</span><kbd>⌘K</kbd></button>' + (window.COFFEE || '') + '<button class="iconbtn" id="themeBtn" aria-label="Toggle dark mode">' + I(theme() === 'dark' ? 'sun' : 'moon', 15) + '</button>' + (tn ? '<a class="chip-day" href="#plan-' + tn + '">' + I('flag', 13) + ' Day ' + tn + ' · today</a>' : '') + '</header>';
+    return '<header class="top"><button class="iconbtn menubtn" id="menuBtn" aria-label="Course menu" style="display:none">' + I('sheet', 15) + '</button><a class="brand" href="#learn">' + LOGO + '<span>ship_it() <mark>Academy</mark></span></a><nav class="appsw" aria-label="Switch between game and course"><a href="' + window.SITE.routes.game + '" data-togame>⚡ Game</a><a class="on" href="' + window.SITE.routes.course + '" aria-current="page">🎓 Course</a></nav><nav class="tabs">' + TABS.map(function (t) { return '<a class="tab' + (t[0] === tab ? ' on' : '') + (t[0] === 'play' ? ' tab-play' : '') + '" href="#' + t[0] + '">' + I(t[2], 14) + '<span>' + t[1] + '</span></a>'; }).join('') + '</nav><span class="sp"></span><button class="search" id="openSearch">' + I('search', 14) + '<span>Search lessons</span><kbd>⌘K</kbd></button>' + (window.COFFEE || '') + '<button class="iconbtn" id="themeBtn" aria-label="Toggle dark mode">' + I(theme() === 'dark' ? 'sun' : 'moon', 15) + '</button>' + (planChip() || (tn ? '<a class="chip-day" href="#plan-' + tn + '">' + I('flag', 13) + ' Day ' + tn + ' · today</a>' : '')) + '</header>';
   }
   var openSecs = null;
   function treeHTML(cur) {
@@ -181,7 +182,7 @@
 
   function planPage(n) {
     if (!n) {
-      var tn = todayN(), h = '<div><h1>Your 14-day roadmap</h1><p class="lead">Two hours a day. Each day has a reading and animation block, a lab, a quiz and a practice question. The course tree on the left holds extra deep dives for when you want to go further.</p></div><div class="daycards">';
+      var tn = todayN(), h = '<div><h1>Your 14-day roadmap</h1><p class="lead">Two hours a day. Each day has a reading and animation block, a lab, a quiz and a practice question. The course tree on the left holds extra deep dives for when you want to go further.</p></div><a class="sheet pad plancta" href="#myplan">' + I('clock', 18) + '<span><b>' + (S.plan ? 'Open my study plan' : 'Have more or less than 14 days?') + '</b>' + (S.plan ? 'Your ' + S.plan.days + '-day plan, with today\'s lessons ready.' : 'Make a plan for 1 week up to 3 months, focused on backend, frontend or AI.') + '</span><span class="go">→</span></a><div class="daycards">';
       DAYS.forEach(function (d) {
         var p = prog(d);
         h += '<a class="dcard sheet' + (d.n === tn ? ' today' : '') + '" href="#plan-' + d.n + '" style="text-decoration:none"><h3>Day ' + d.n + ' · ' + esc(d.title) + (d.n === tn ? '<span class="tag tag--green">today</span>' : '') + '<span class="tag tag--violet" style="margin-left:auto">' + p.n + '/' + p.t + '</span></h3><p style="margin:0;color:var(--muted)">' + md(d.tagline) + '</p><div class="bar"><i style="width:' + Math.round(p.p * 100) + '%"></i></div></a>';
@@ -472,6 +473,139 @@
   function toast(msg) { var t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t); setTimeout(function () { t.remove(); }, 2200); }
 
   /* ---------- router ---------- */
+  /* ---------- study plans: a day-by-day schedule for the time you have ---------- */
+  var PLAN_LENS = [[7, '1 week'], [14, '2 weeks'], [21, '3 weeks'], [30, '1 month'], [60, '2 months'], [90, '3 months']];
+  var PLAN_MINS = [30, 45, 60, 90, 120, 180];
+  var ALL_SECS = COURSE.map(function (s) { return s.id; });
+  var FOCI = {
+    all: { name: 'Everything', blurb: 'Backend, frontend, AI and the interview round.', secs: ALL_SECS, ess: ALL_SECS, core: ['ai'] },
+    backend: { name: 'Backend and distributed systems', blurb: 'Scaling, data, messaging, reliability and classic designs.', secs: ['foundations', 'scaling', 'data', 'comm', 'caching', 'reliability', 'designs', 'interview'], ess: ['foundations', 'scaling', 'data', 'comm', 'caching', 'reliability', 'designs', 'interview'], core: ['foundations', 'data', 'reliability'] },
+    frontend: { name: 'Frontend', blurb: 'Rendering, performance, state, security and UI design rounds.', lead: ['frontend'], secs: ['foundations', 'scaling', 'comm', 'caching', 'frontend', 'interview'], ess: ['foundations', 'caching', 'frontend', 'interview'], core: ['foundations', 'frontend'] },
+    ai: { name: 'AI and ML systems', blurb: 'LLMs, RAG, serving, agents, evals and the backend they need.', lead: ['ai'], secs: ['foundations', 'scaling', 'data', 'caching', 'ai', 'interview'], ess: ['foundations', 'ai', 'interview'], core: ['foundations', 'ai'] }
+  };
+  var TIER_NAME = ['Essential', 'Recommended', 'Optional'];
+  function inList(a, x) { return a.indexOf(x) >= 0; }
+  function tierOf(L, f) {
+    var s = L.sec.id;
+    if (!inList(f.secs, s)) return -1;
+    if (L.type === 't' && !L.deep && inList(f.ess, s) && (!L.extra || inList(f.core, s))) return 0;
+    if (inList(f.ess, s) || (L.deep && inList(f.core, s))) return 1;
+    return 2;
+  }
+  function addDays(ymdStr, k) { var p = ymdStr.split('-').map(Number); return ymd(new Date(p[0], p[1] - 1, p[2] + k)); }
+  function fmtDay(ymdStr) { var p = ymdStr.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); }
+  function daysBetween(a, b) { var p = a.split('-').map(Number), q = b.split('-').map(Number); return Math.round((new Date(q[0], q[1] - 1, q[2]) - new Date(p[0], p[1] - 1, p[2])) / 86400000); }
+
+  // Pure: settings -> schedule. Same settings always give the same plan, so only settings are stored.
+  function buildPlan(cfg) {
+    var f = FOCI[cfg.focus] || FOCI.all, D = cfg.days, B = cfg.min;
+    var pool = [];
+    // order: foundations, then the track's own sections, then supporting ones, interview round last
+    function rank(L) { var id = L.sec.id; return id === 'foundations' ? 0 : id === 'interview' ? 3 : !f.lead || inList(f.lead, id) ? 1 : 2; }
+    function ord(L) { return rank(L) * 10000 + L.idx; }
+    LESSONS.forEach(function (L) { var t = tierOf(L, f); if (t >= 0) pool.push({ kind: L.type === 's' ? 'scene' : 'lesson', L: L, tier: t, min: L.min, order: ord(L) }); });
+    var have = {}; pool.forEach(function (it) { have[it.L.id] = it; });
+    (window.EXERCISES || []).forEach(function (e) {
+      var need = needLessons(e).filter(function (L) { return have[L.id]; });
+      var coreHit = need.some(function (L) { return L.sec.id !== 'foundations' && L.sec.id !== 'interview' && inList(f.core, L.sec.id); });
+      if (!need.length || need.length < (coreHit ? 0.4 : 0.7) * needLessons(e).length) return;      // enough of what it tests is in this track
+      pool.push({ kind: 'mock', e: e, tier: 1, min: e.min || 45, order: Math.max.apply(null, need.map(ord)) + 0.5, need: need });
+    });
+    pool.sort(function (a, b) { return a.order - b.order; });
+    // review days: every 7th day for 3+ weeks; otherwise the last day is a mock-interview day
+    var review = {}; if (D >= 21) for (var r = 7; r < D - 1; r += 7) review[r] = 1; review[D] = 1;      // weekly reviews, final mock day
+    var learnDays = D - Object.keys(review).length, cap = learnDays * B;
+    var pick = [], total = 0, essMin = 0;
+    pool.forEach(function (it) { if (it.tier === 0) { pick.push(it); total += it.min; essMin += it.min; } });
+    [1, 2, 1].forEach(function (t) {                                           // last pass: mocks whose lessons came in as optional
+      pool.forEach(function (it) {
+        if (it.tier !== t || pick.indexOf(it) >= 0 || total + it.min > cap) return;
+        if (it.kind === 'mock' && !it.need.every(function (L) { return pick.some(function (p) { return p.L === L; }); })) return;
+        pick.push(it); total += it.min;
+      });
+    });
+    pick.sort(function (a, b) { return a.order - b.order; });
+    var perDay = Math.ceil(total / learnDays), overload = essMin > cap;
+    // spread evenly by cumulative minutes, keeping course order
+    var learn = []; for (var i = 0; i < learnDays; i++) learn.push([]);
+    var cum = 0; pick.forEach(function (it) { var di = Math.min(learnDays - 1, Math.floor((cum + it.min / 2) / total * learnDays)); learn[di].push(it); cum += it.min; });
+    var days = [], li = 0;
+    for (var n = 1; n <= D; n++) {
+      var date = addDays(cfg.start, n - 1);
+      if (review[n]) days.push({ n: n, date: date, review: true, last: n === D, items: [] });
+      else days.push({ n: n, date: date, review: false, items: learn[li++] });
+    }
+    var counts = { lesson: 0, scene: 0, mock: 0 }, tiers = [0, 0, 0], left = { 0: 0, 1: 0, 2: 0 };
+    pick.forEach(function (it) { counts[it.kind]++; tiers[it.tier]++; });
+    pool.forEach(function (it) { if (pick.indexOf(it) < 0) left[it.tier]++; });
+    return { cfg: cfg, focus: f, days: days, total: total, perDay: perDay, overload: overload, essPerDay: Math.ceil(essMin / learnDays), counts: counts, tiers: tiers, left: left, poolSize: pool.length, picked: pick.length };
+  }
+  function itemDone(it) { return it.kind === 'mock' ? !!(S.attempts[it.e.id] && S.attempts[it.e.id].length) : lessonDone(it.L); }
+  function dayDone(d) { return d.review ? !!S.done['plan-rev-' + d.n] : d.items.length > 0 && d.items.every(itemDone); }
+  function planToday(p) { var k = daysBetween(p.cfg.start, ymd(new Date())) + 1; return k; }
+
+  function planItemHTML(it) {
+    var done = itemDone(it), href = it.kind === 'mock' ? '#ex-' + it.e.id : '#' + it.L.hash;
+    var icon = done ? I('check', 13) : it.kind === 'scene' ? I('play', 13) : it.kind === 'mock' ? I('flag', 13) : I('doc', 13);
+    var label = it.kind === 'mock' ? '<b>Mock round:</b> ' + esc(it.e.title) : (it.kind === 'scene' ? '<b>Watch:</b> ' : '') + esc(it.L.title);
+    return '<a class="pi' + (done ? ' done' : '') + '" href="' + href + '">' + icon + '<span class="pt">' + label + '</span><span class="tier t' + it.tier + '">' + TIER_NAME[it.tier] + '</span><span class="pm">' + it.min + ' min</span></a>';
+  }
+  function reviewDayHTML(d) {
+    var key = 'plan-rev-' + d.n, ch = S.done[key] ? ' checked' : '';
+    var rows = d.last
+      ? [['#ex', I('flag', 13), '<b>Mock interview:</b> pick a design you have not tried and do it aloud in 45 minutes', 45], ['#t-14-1', I('sheet', 13), 'Run the final checklist on your answer', 15], ['#review', I('cards', 13), 'Recall: clear your due flashcards', 20]]
+      : [['#review', I('cards', 13), 'Recall: clear your due flashcards', 20], ['#practice', I('target', 13), 'Retake the drills for this week’s topics', 20], ['#ex', I('flag', 13), 'One mock round, aloud and timed', 45], ['#myplan', I('replay', 13), 'Catch up on anything unchecked from this week', 0]];
+    return rows.map(function (r) { return '<a class="pi" href="' + r[0] + '">' + r[1] + '<span class="pt">' + r[2] + '</span><span></span><span class="pm">' + (r[3] ? r[3] + ' min' : 'as needed') + '</span></a>'; }).join('') + '<label class="pi revdone"><input type="checkbox" data-check="' + key + '"' + ch + '><span class="pt">Mark this ' + (d.last ? 'mock day' : 'review day') + ' done</span></label>';
+  }
+  function planDayHTML(d, today, open) {
+    var mins = d.review ? (d.last ? 80 : 85) : d.items.reduce(function (s, it) { return s + it.min; }, 0);
+    var state = dayDone(d) ? 'done' : d.n === today ? 'today' : d.n < today ? 'late' : '';
+    var firstL = d.items.filter(function (it) { return it.L; })[0], title = d.review ? (d.last ? 'Mock interview day' : 'Review day') : firstL ? firstL.L.sec.name : d.items.length ? 'Mock rounds' : 'Catch-up day';
+    return '<details class="pday sheet ' + state + '"' + (open ? ' open' : '') + '><summary><span class="dn">Day ' + d.n + '</span><span class="dd">' + fmtDay(d.date) + '</span><span class="dt">' + esc(title) + '</span>' + (state === 'today' ? '<span class="tag tag--green">today</span>' : state === 'done' ? '<span class="tag tag--mint">done</span>' : state === 'late' ? '<span class="tag tag--orange">to catch up</span>' : '') + '<span class="dmin">' + (mins ? '~' + mins + ' min' : '') + '</span></summary><div class="pitems">' + (d.review ? reviewDayHTML(d) : d.items.length ? d.items.map(planItemHTML).join('') : '<p class="muted">Nothing new today: catch up or review.</p>') + '</div></details>';
+  }
+  function planSummaryHTML(p) {
+    var c = p.counts, f = p.focus, h = '<div class="psum"><div><b>' + p.cfg.days + '</b><span>days</span></div><div><b>~' + p.perDay + '</b><span>min a day</span></div><div><b>' + c.lesson + '</b><span>lessons</span></div><div><b>' + c.scene + '</b><span>animations</span></div><div><b>' + c.mock + '</b><span>mock rounds</span></div></div>';
+    if (p.overload) h += '<div class="callout warn" style="margin:12px 0 0"><b>Tight fit</b>The essential lessons for ' + esc(f.name.toLowerCase()) + ' need about ' + p.essPerDay + ' minutes a day in ' + p.cfg.days + ' days, more than the ' + p.cfg.min + ' you picked. The plan keeps them all; choose a longer plan or more time a day to make it lighter.</div>';
+    else if (p.left[1] + p.left[2] > 0) h += '<p class="muted" style="margin:12px 0 0">Left out to fit your time: ' + [p.left[1] ? p.left[1] + ' recommended' : '', p.left[2] ? p.left[2] + ' optional' : ''].filter(Boolean).join(' and ') + ' item' + (p.left[1] + p.left[2] === 1 ? '' : 's') + '. A longer plan or more minutes a day adds them back.</p>';
+    else h += '<p class="muted" style="margin:12px 0 0">Everything in this track fits, including every animation and mock round that matches it.</p>';
+    return h;
+  }
+  function planDraft() { var d = S.planDraft || {}; var cur = S.plan || {}; return { days: d.days || cur.days || 14, focus: d.focus || cur.focus || 'all', min: d.min || cur.min || 90, start: d.start || ymd(new Date()) }; }
+  function planSetupHTML() {
+    var cfg = planDraft(), p = buildPlan(cfg);
+    var h = '<div><h1>Make a study plan</h1><p class="lead">Tell us how long you have and what you are preparing for. You get a day-by-day schedule built from the course lessons, animations and mock rounds, with review days and a final mock interview.</p></div>';
+    h += '<div class="sheet pad psetup"><span class="cap">How long do you have?</span><div class="pills">' + PLAN_LENS.map(function (l) { return '<button class="pill' + (cfg.days === l[0] ? ' on' : '') + '" data-pd="' + l[0] + '">' + l[1] + '</button>'; }).join('') + '</div>';
+    h += '<span class="cap">What are you preparing for?</span><div class="pfoci">' + Object.keys(FOCI).map(function (k) { var f = FOCI[k]; return '<button class="pfocus' + (cfg.focus === k ? ' on' : '') + '" data-pf="' + k + '"><b>' + esc(f.name) + '</b><span>' + esc(f.blurb) + '</span></button>'; }).join('') + '</div>';
+    h += '<span class="cap">Time each day</span><div class="pills">' + PLAN_MINS.map(function (m) { return '<button class="pill' + (cfg.min === m ? ' on' : '') + '" data-pm="' + m + '">' + (m < 60 ? m + ' min' : (m / 60) + (m === 60 ? ' hour' : ' hours')) + '</button>'; }).join('') + '</div>';
+    h += '<div class="field" style="margin:4px 0 0"><label for="planStart">Starts on<input type="text" id="planStart" value="' + esc(cfg.start) + '" placeholder="YYYY-MM-DD"></label></div></div>';
+    h += '<div class="sheet pad"><span class="cap">Your plan</span>' + planSummaryHTML(p) + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn-pop btn-next" id="planStart_go">' + (S.plan ? 'Switch to this plan' : 'Start this plan') + '</button>' + (S.plan ? '<a class="btn-pop" href="#myplan" id="planCancel">Keep my current plan</a>' : '') + '</div>' + (S.plan ? '<p class="muted" style="margin:8px 0 0">Lessons you already finished stay checked in the new plan.</p>' : '') + '</div>';
+    h += '<div><h3 style="margin:18px 0 8px;font-size:15px">Preview</h3>' + p.days.slice(0, 3).map(function (d, i) { return planDayHTML(d, 0, i === 0); }).join('') + (p.days.length > 3 ? '<p class="muted">… and ' + (p.days.length - 3) + ' more days.</p>' : '') + '</div>';
+    return wrap(h);
+  }
+  function myPlanPage(edit) {
+    if (!S.plan || edit) return planSetupHTML();
+    var p = buildPlan(S.plan), today = planToday(p), all = [], doneN = 0;
+    p.days.forEach(function (d) { d.items.forEach(function (it) { all.push(it); if (itemDone(it)) doneN++; }); });
+    var dueN = 0; p.days.forEach(function (d) { if (d.n < today) dueN += d.items.filter(function (it) { return !itemDone(it); }).length; });
+    var pct = all.length ? Math.round(doneN / all.length * 100) : 0;
+    var status = today < 1 ? 'Starts ' + fmtDay(p.cfg.start) + '.' : today > p.cfg.days ? (pct === 100 ? 'Plan complete. Well done.' : 'The plan has ended; ' + (all.length - doneN) + ' items are still open.') : 'Day ' + today + ' of ' + p.cfg.days + '.' + (dueN ? ' ' + dueN + ' item' + (dueN === 1 ? '' : 's') + ' from earlier days to catch up.' : ' You are on track.');
+    var h = '<div><h1>My study plan</h1><p class="lead">' + esc(p.focus.name) + ' in ' + p.cfg.days + ' days, about ' + p.perDay + ' minutes a day. ' + esc(status) + '</p></div>';
+    h += '<div class="sheet pad"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="cap">Progress</span><b>' + doneN + ' of ' + all.length + ' items · ' + pct + '%</b></div><div class="bar" style="margin-top:8px"><i style="width:' + pct + '%"></i></div>' + planSummaryHTML(p) + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><a class="btn-pop" href="#myplan-edit">Change plan</a><button class="btn-pop" id="planEnd">End this plan</button></div></div>';
+    var openN = today >= 1 && today <= p.cfg.days ? today : 0;
+    var weeks = []; p.days.forEach(function (d) { var w = Math.floor((d.n - 1) / 7); (weeks[w] = weeks[w] || []).push(d); });
+    weeks.forEach(function (w, i) { h += '<h3 class="pweek">Week ' + (i + 1) + '</h3>' + w.map(function (d) { return planDayHTML(d, today, d.n === openN); }).join(''); });
+    return wrap(h);
+  }
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-pd],[data-pf],[data-pm],#planStart_go,#planEnd'); if (!t) return;
+    var d = S.planDraft = planDraft(), sv = document.getElementById('planStart');
+    if (sv && /^\d{4}-\d{2}-\d{2}$/.test(sv.value.trim())) d.start = sv.value.trim();
+    if (t.dataset.pd) d.days = +t.dataset.pd; else if (t.dataset.pf) d.focus = t.dataset.pf; else if (t.dataset.pm) d.min = +t.dataset.pm;
+    else if (t.id === 'planStart_go') { S.plan = { days: d.days, focus: d.focus, min: d.min, start: d.start }; S.planDraft = null; save(); location.hash = '#myplan'; render(); return; }
+    else if (t.id === 'planEnd') { if (!t.dataset.sure) { t.dataset.sure = 1; t.textContent = 'Click again to end it (progress is kept)'; return; } S.plan = null; save(); render(); return; }
+    save(); var y = window.scrollY; render(); window.scrollTo(0, y);
+  });
+
   function render() {
     window.Player.destroy();
     var hash = (location.hash || '#learn').replace(/^#/, ''), m, tab = 'learn', body = '', L = null, after = null, step = 0;
@@ -481,7 +615,8 @@
       L = sceneLesson(m[1]); if (!L) { location.replace('#learn'); return; } step = m[2] ? Math.max(0, +m[2] - 1) : 0; body = scenePage(L); after = function () { mountScene(L, step); }; document.title = L.title + ' · ship_it() Academy';
     } else if ((/^t-(\d+)-(\d+)$/.test(hash) || /^x-/.test(hash)) && BYID[hash]) {
       L = BYID[hash]; body = textPage(L); after = function () { mountDynamic(document.querySelector('.read')); }; document.title = L.title + ' · ship_it() Academy';
-    } else if ((m = /^plan(?:-(\d+))?$/.exec(hash))) { tab = 'plan'; body = planPage(m[1] ? +m[1] : 0); document.title = 'Roadmap · ship_it() Academy'; }
+    } else if ((m = /^myplan(-edit)?$/.exec(hash))) { tab = 'myplan'; body = myPlanPage(!!m[1]); document.title = 'My plan · ship_it() Academy'; }
+    else if ((m = /^plan(?:-(\d+))?$/.exec(hash))) { tab = 'plan'; body = planPage(m[1] ? +m[1] : 0); document.title = 'Roadmap · ship_it() Academy'; }
     else if ((m = /^practice(?:-(\d+))?$/.exec(hash))) { tab = 'practice'; var pd = m[1] ? dayByN(+m[1]) : null; body = practicePage(m[1] ? +m[1] : 0); if (pd) after = function () { mountQuiz(pd); if (pd.practice) mountPractice(pd); }; document.title = 'Drills · ship_it() Academy'; }
     else if ((m = /^labs(?:-(\d+))?$/.exec(hash))) { tab = 'labs'; body = labsPage(m[1] ? +m[1] : 0); after = function () { mountDynamic(document.querySelector('.main')); }; document.title = 'Sandbox · ship_it() Academy'; }
     else if ((m = /^ex(?:-(.+))?$/.exec(hash))) { tab = 'ex'; var ex = m[1] ? exById(m[1]) : null; if (m[1] && !ex) { location.replace('#ex'); return; } body = ex ? exPage(ex) : exListPage(); if (ex) after = function () { mountEx(ex); mountDynamic(document.querySelector('.main')); }; document.title = (ex ? ex.title : 'Mock rounds') + ' · ship_it() Academy'; }
