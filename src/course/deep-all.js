@@ -3,3 +3,4 @@ import './deep-1.js';
 import './deep-2.js';
 import './deep-3.js';
 import './deep-4.js';
+import './deep-5.js';
