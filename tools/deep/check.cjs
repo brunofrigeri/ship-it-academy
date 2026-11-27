@@ -10,7 +10,7 @@ for (const f of fs.readdirSync(dir).filter(f => /^deep-(?!all).*\.js$/.test(f)))
   const lists = Array.isArray(data) ? data : Object.values(data);
   lists.forEach((blocks, li) => blocks.forEach(b => {
     if (!b.code || !['js', 'javascript'].includes(b.lang)) return;
-    const env = /\b(app|db|req|res|require|fetch|document|performance|WebSocket|EventSource|window|navigator|localStorage|React|useState|useEffect|redis|kafka|queue|crypto\.subtle|self|caches|bus|render|import|export|process|setInterval)\b/.test(b.code);
+    const env = /\b(app|db|req|res|require|fetch|document|performance|WebSocket|EventSource|window|navigator|localStorage|React|useState|useEffect|useMutation|useQuery|queryClient|api|redis|kafka|queue|crypto\.subtle|self|caches|bus|render|import|export|process|setInterval)\b/.test(b.code);
     try {
       if (env) { new Function('return async () => {\n' + b.code.replace(/^\s*(import|export) .*$/gm, '') + '\n}'); parsed++; }
       else { const out = []; const log = console.log; console.log = (...a) => out.push(a.join(' ')); try { new Function(b.code)(); } finally { console.log = log; } ran++; if (process.argv[2] === '-v') console.log(`[${f}#${li}]`, out.join(' | ')); }
