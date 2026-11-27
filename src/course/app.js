@@ -103,7 +103,7 @@
   }
 
   /* ---------- chrome ---------- */
-  var TABS = [['learn', 'Lessons', 'book'], ['plan', 'Roadmap', 'plan'], ['myplan', 'My plan', 'clock'], ['practice', 'Drills', 'target'], ['labs', 'Sandbox', 'flask'], ['ex', 'Mock rounds', 'flag'], ['review', 'Recall', 'cards'], ['cheat', 'Quick refs', 'sheet']];
+  var TABS = [['learn', 'Lessons', 'book'], ['plan', 'Roadmap', 'plan'], ['myplan', 'My plan', 'clock'], ['practice', 'Drills', 'target'], ['labs', 'Sandbox', 'flask'], ['ex', 'Mock rounds', 'flag'], ['review', 'Recall', 'cards'], ['videos', 'Videos', 'play'], ['cheat', 'Quick refs', 'sheet']];
   var LOGO = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="3" width="28" height="26" rx="9" fill="var(--pri)"/><path d="M9.5 12.5l4.5 3.5-4.5 3.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M16.5 20h6" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle cx="25" cy="8" r="4" fill="var(--acc)" stroke="var(--paper)" stroke-width="1.6"/></svg>';
   function theme() { return S.theme || (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); }
   /* When the course runs on top of the game (same site, inside the game page), "Game" just hides the course. */
@@ -168,12 +168,13 @@
   function textPage(L) {
     var l = L.lesson, nx = next(L), pv = prev(L), heads = [];
     (l.body || []).forEach(function (b) { if (b.h) heads.push(b.h); else if (b.part) heads.push((PARTS[b.part] || {}).t || b.part); });
+    heads.push('🎬 Watch it');
     var sc = sceneOf(L);
     var outline = heads.length ? '<div class="learn sheet outline"><span class="cap">On this page</span>' + heads.map(function (h, i) { return '<a href="#" data-jump="' + i + '">' + md(h) + '</a>'; }).join('') + '</div>' : '';
     var scenes = sc.length ? '<div class="learn sheet"><span class="cap">See it move</span>' + sc.map(function (s) { return '<a class="btn-pop btn-next" href="#' + s.hash + '">' + I('play', 13) + ' ' + esc(s.short) + '</a>'; }).join('') + '</div>' : '';
     var bodyHTML = blocks(l.body), n = 0; bodyHTML = bodyHTML.replace(/<h3(?=[ >])/g, function () { return '<h3 id="hd' + (n++) + '"'; });
     return '<div class="shell"><aside class="side" id="side"></aside><main class="main"><div class="lesson-grid"><div class="center"><div class="sheet lhead">' + crumbHTML(L) + '<div class="row"><h1>' + esc(l.title) + '</h1><div class="tags">' + tags(L) + '</div></div><p class="sub">' + (L.day ? 'Day ' + L.day.n + ' · ' + esc(L.day.title) : 'Concept deep dive added to cover a gap in the basics') + '</p></div>' +
-      '<div class="sheet read"><div class="prose">' + bodyHTML + '</div><div class="lfoot" style="padding-left:0;padding-right:0"><label class="check"><input type="checkbox" data-check="' + L.key + '"' + (S.done[L.key] ? ' checked' : '') + '> ' + (L.deep ? 'I read this' : 'Mark as read') + '</label><span style="display:flex;gap:8px;flex-wrap:wrap">' + (pv ? '<a class="btn-pop" href="#' + pv.hash + '">' + I('back', 13) + ' Previous</a>' : '') + (nx ? '<a class="btn-pop btn-next" href="#' + nx.hash + '">Next: ' + esc(nx.short.length > 28 ? nx.short.slice(0, 27) + '…' : nx.short) + ' ' + I('arrow', 13) + '</a>' : '') + '</span></div></div></div><div class="rightcol">' + scenes + outline + '' + (L.day ? '<div class="learn sheet"><span class="cap">Today</span><a class="btn-pop" href="#plan-' + L.day.n + '">' + I('plan', 13) + ' Day ' + L.day.n + ' plan</a><a class="btn-pop" href="#practice-' + L.day.n + '">' + I('target', 13) + ' Quiz and practice</a></div>' : '<div class="learn sheet"><span class="cap">Apply it</span><a class="btn-pop btn-next" href="#ex">' + I('flag', 13) + ' Mock rounds</a></div>') + '</div></div></main></div>';
+      '<div class="sheet read"><div class="prose">' + bodyHTML + videosHTML(L.id, l.title, 'hd' + (heads.length - 1)) + '</div><div class="lfoot" style="padding-left:0;padding-right:0"><label class="check"><input type="checkbox" data-check="' + L.key + '"' + (S.done[L.key] ? ' checked' : '') + '> ' + (L.deep ? 'I read this' : 'Mark as read') + '</label><span style="display:flex;gap:8px;flex-wrap:wrap">' + (pv ? '<a class="btn-pop" href="#' + pv.hash + '">' + I('back', 13) + ' Previous</a>' : '') + (nx ? '<a class="btn-pop btn-next" href="#' + nx.hash + '">Next: ' + esc(nx.short.length > 28 ? nx.short.slice(0, 27) + '…' : nx.short) + ' ' + I('arrow', 13) + '</a>' : '') + '</span></div></div></div><div class="rightcol">' + scenes + outline + '' + (L.day ? '<div class="learn sheet"><span class="cap">Today</span><a class="btn-pop" href="#plan-' + L.day.n + '">' + I('plan', 13) + ' Day ' + L.day.n + ' plan</a><a class="btn-pop" href="#practice-' + L.day.n + '">' + I('target', 13) + ' Quiz and practice</a></div>' : '<div class="learn sheet"><span class="cap">Apply it</span><a class="btn-pop btn-next" href="#ex">' + I('flag', 13) + ' Mock rounds</a></div>') + '</div></div></main></div>';
   }
 
   /* ---------- other pages ---------- */
@@ -365,7 +366,7 @@
       prereqHTML(e) +
       '<div class="sheet read"><h2>' + I('chat', 18) + ' The question</h2><div class="prose"><p style="font-size:14px">' + md(e.prompt) + '</p><p class="note-sm">Method: 5 min requirements, 5 min estimates, 15 min high-level design, 15 min deep dives, 5 min trade-offs. Say your assumptions out loud.</p></div><div class="ctl" style="margin:10px 0"><button class="btn" id="exTimer">' + I('clock', 13) + ' <span>Start ' + e.min + ' min timer</span></button></div><div id="exMount"></div></div>' +
       '<div id="exResult"></div><div id="exHist"></div>' +
-      '<details class="dd sheet" id="exWalk"><summary style="font-size:14px;padding:12px 16px">' + I('eye', 14) + ' Reveal the model walkthrough (after you tried)</summary><div class="inner prose" style="padding:0 18px 12px">' + blocks(e.walk) + '</div></details>' +
+      ((window.VIDEOS || {})['ex-' + e.id] ? '<details class="dd sheet" id="exVids"><summary style="font-size:14px;padding:12px 16px">🎬 Watch an expert answer this question (after you tried)</summary><div class="inner" style="padding:0 18px 14px"><div class="vgrid">' + window.VIDEOS['ex-' + e.id].map(videoCard).join('') + '</div></div></details>' : '') + '<details class="dd sheet" id="exWalk"><summary style="font-size:14px;padding:12px 16px">' + I('eye', 14) + ' Reveal the model walkthrough (after you tried)</summary><div class="inner prose" style="padding:0 18px 12px">' + blocks(e.walk) + '</div></details>' +
       '<div class="sheet read"><h2>' + I('target', 18) + ' Follow-ups the interviewer may ask</h2><div class="prose"><ul>' + e.follow.map(function (f) { return '<li>' + md(f) + '</li>'; }).join('') + '</ul></div></div>' +
       '<div class="lfoot sheet"><label class="check"><input type="checkbox" data-check="' + k + '"' + (S.done[k] ? ' checked' : '') + '> Mark as completed</label><span style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn-pop" href="#ex">All exercises</a>' + (pv ? '<a class="btn-pop" href="#ex-' + pv.id + '">' + I('back', 13) + ' Previous</a>' : '') + (nx ? '<a class="btn-pop btn-next" href="#ex-' + nx.id + '">Next ' + I('arrow', 13) + '</a>' : '') + '</span></div>');
   }
@@ -473,6 +474,38 @@
   function toast(msg) { var t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t); setTimeout(function () { t.remove(); }, 2200); }
 
   /* ---------- router ---------- */
+
+  /* ---------- video references ---------- */
+  function fmtT(sec) { var m = Math.floor(sec / 60), s = sec % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
+  function videoCard(v) {
+    var url = 'https://www.youtube.com/watch?v=' + v.id + (v.start ? '&t=' + v.start + 's' : '');
+    return '<div class="vcard"><button class="vthumb" data-vid="' + v.id + '" data-start="' + (v.start || 0) + '" aria-label="Play ' + esc(v.title) + '"><img loading="lazy" alt="" onerror="this.style.visibility=\'hidden\'" src="https://i.ytimg.com/vi/' + v.id + '/mqdefault.jpg"><span class="vplay">▶</span>' + (v.start ? '<span class="vfrom">from ' + fmtT(v.start) + '</span>' : '') + '</button><div class="vmeta"><b>' + esc(v.title) + '</b><span>' + esc(v.ch || 'YouTube') + (v.min ? ' · ' + v.min + ' min' : '') + '</span>' + (v.note ? '<p>' + md(v.note) + '</p>' : '') + '<a href="' + url + '" target="_blank" rel="noopener">Open on YouTube ↗</a></div></div>';
+  }
+  function searchLink(q) { return '<a class="vsearch" href="https://www.youtube.com/results?search_query=' + encodeURIComponent(q) + '" target="_blank" rel="noopener">' + I('search', 13) + ' Search YouTube: “' + esc(q) + '” ↗</a>'; }
+  function videoQuery(title) { return title.replace(/^Blueprint( UI)?:\s*/, 'design ').replace(/[,:].*$/, '') + ' system design interview'; }
+  function videosHTML(key, title, hid) {
+    var list = (window.VIDEOS || {})[key] || [];
+    return '<h3 class="lpart" id="' + (hid || 'watch') + '">🎬 Watch it</h3>' + (list.length ? '<p class="muted" style="margin:0 0 10px">Video explanations of this topic. Times jump to the part that matches this lesson.</p><div class="vgrid">' + list.map(videoCard).join('') + '</div>' : '<p class="muted" style="margin:0 0 8px">No single video covers this lesson well enough to recommend yet. Search for talks on the topic:</p>') + searchLink(videoQuery(title));
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.vthumb'); if (!b) return;
+    var f = document.createElement('iframe');
+    f.src = 'https://www.youtube-nocookie.com/embed/' + b.dataset.vid + '?autoplay=1&rel=0' + (+b.dataset.start ? '&start=' + b.dataset.start : '');
+    f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.allowFullscreen = true; f.title = 'YouTube video'; f.className = 'vframe';
+    b.replaceWith(f);
+  });
+  function videosPage() {
+    var h = '<div><h1>Videos</h1><p class="lead">Mock interviews and talks matched to the lessons. Each opens at the part that fits the lesson. All links were checked against public pages before they were added.</p></div>';
+    COURSE.forEach(function (sec) {
+      var rows = sec.list.filter(function (L) { return (window.VIDEOS || {})[L.id]; });
+      if (!rows.length) return;
+      h += '<h3 class="pweek">' + esc(sec.name) + '</h3>' + rows.map(function (L) { return '<div class="sheet pad vrow"><a href="#' + L.hash + '#watch" class="vlesson">' + esc(L.title) + ' →</a><div class="vgrid">' + window.VIDEOS[L.id].map(videoCard).join('') + '</div></div>'; }).join('');
+    });
+    var ex = (window.EXERCISES || []).filter(function (e) { return (window.VIDEOS || {})['ex-' + e.id]; });
+    if (ex.length) h += '<h3 class="pweek">Mock rounds: full answers</h3>' + ex.map(function (e) { return '<div class="sheet pad vrow"><a href="#ex-' + e.id + '" class="vlesson">' + esc(e.title) + ' →</a><div class="vgrid">' + window.VIDEOS['ex-' + e.id].map(videoCard).join('') + '</div></div>'; }).join('');
+    return wrap(h);
+  }
+
   /* ---------- study plans: a day-by-day schedule for the time you have ---------- */
   var PLAN_LENS = [[7, '1 week'], [14, '2 weeks'], [21, '3 weeks'], [30, '1 month'], [60, '2 months'], [90, '3 months']];
   var PLAN_MINS = [30, 45, 60, 90, 120, 180];
@@ -625,6 +658,7 @@
     else if ((m = /^practice(?:-(\d+))?$/.exec(hash))) { tab = 'practice'; var pd = m[1] ? dayByN(+m[1]) : null; body = practicePage(m[1] ? +m[1] : 0); if (pd) after = function () { mountQuiz(pd); if (pd.practice) mountPractice(pd); }; document.title = 'Drills · ship_it() Academy'; }
     else if ((m = /^labs(?:-(\d+))?$/.exec(hash))) { tab = 'labs'; body = labsPage(m[1] ? +m[1] : 0); after = function () { mountDynamic(document.querySelector('.main')); }; document.title = 'Sandbox · ship_it() Academy'; }
     else if ((m = /^ex(?:-(.+))?$/.exec(hash))) { tab = 'ex'; var ex = m[1] ? exById(m[1]) : null; if (m[1] && !ex) { location.replace('#ex'); return; } body = ex ? exPage(ex) : exListPage(); if (ex) after = function () { mountEx(ex); mountDynamic(document.querySelector('.main')); }; document.title = (ex ? ex.title : 'Mock rounds') + ' · ship_it() Academy'; }
+    else if (hash === 'videos') { tab = 'videos'; body = videosPage(); document.title = 'Videos · ship_it() Academy'; }
     else if (hash === 'review') { tab = 'review'; body = reviewPage(); after = mountReview; document.title = 'Recall · ship_it() Academy'; }
     else if (hash === 'play') { if (IN_GAME) { backToGame(); location.replace('#learn'); } else location.replace(window.SITE.routes.game); return; }
     else if (hash === 'cheat' || hash === 'cheatsheet') { tab = 'cheat'; body = cheatPage(); document.title = 'Quick refs · ship_it() Academy'; }

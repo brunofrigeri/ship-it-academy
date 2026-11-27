@@ -22,4 +22,5 @@ import './content-3.js';
 import './content-4.js';
 import './deep-all.js';
 import './names.js';
+import './videos.js';
 import './app.js';
