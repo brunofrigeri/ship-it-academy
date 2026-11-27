@@ -3,6 +3,7 @@ import '../course/content-1.js';
 import '../course/content-2.js';
 import '../course/content-3.js';
 import '../course/content-4.js';
+import '../course/deep-1.js';
 import '../course/extras.js';
 import '../course/extras-ai.js';
 import '../course/names.js';

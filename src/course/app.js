@@ -65,6 +65,7 @@
   var app = document.getElementById('app');
 
   /* ---------- content blocks ---------- */
+  var PARTS = { read: { i: '📖', t: 'Read: the full explanation', s: 'Slower, with worked examples' }, real: { i: '🌍', t: 'In the real world', s: 'What happened at real companies' }, apply: { i: '🛠', t: 'Apply it', s: 'Code you can run and a checklist for your own system' } };
   function blocks(list) {
     return (list || []).map(function (b) {
       if (typeof b === 'string') return '<p>' + md(b) + '</p>';
@@ -74,7 +75,10 @@
       if (b.tip) return '<div class="callout tip"><b>Pro tip</b><p>' + md(b.tip) + '</p></div>';
       if (b.warn) return '<div class="callout warn"><b>Pitfall</b><p>' + md(b.warn) + '</p></div>';
       if (b.say) return '<div class="callout say"><b>Try saying</b><p>' + md(b.say) + '</p></div>';
-      if (b.code) return '<pre><code>' + esc(b.code) + '</code></pre>';
+      if (b.part) { var P = PARTS[b.part] || { i: '', t: b.part, s: '' }; return '<h3 class="lpart lp-' + esc(b.part) + '"><span class="lp-i">' + P.i + '</span><span class="lp-t">' + esc(b.title || P.t) + '<small>' + esc(P.s) + '</small></span></h3>'; }
+      if (b.case) { var c = b.case; return '<div class="case"><div class="case-h"><b>' + esc(c.who) + '</b><span>' + esc(c.when || '') + '</span></div><h4>' + md(c.title) + '</h4>' + (c.body || []).map(function (x) { return '<p>' + md(x) + '</p>'; }).join('') + (c.lesson ? '<p class="case-l"><b>Takeaway:</b> ' + md(c.lesson) + '</p>' : '') + (c.src ? '<p class="case-s">Source: ' + c.src.map(function (x) { return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + ' ↗</a>'; }).join(' · ') + '</p>' : '') + '</div>'; }
+      if (b.check) return '<ul class="steps">' + b.check.map(function (x) { return '<li><label><input type="checkbox"><span>' + md(x) + '</span></label></li>'; }).join('') + '</ul>';
+      if (b.code) return (b.cap ? '<div class="codecap"><span>' + esc(b.lang || 'code') + '</span>' + md(b.cap) + '</div>' : '') + '<pre' + (b.cap ? ' class="capped"' : '') + '><code>' + esc(b.code) + '</code></pre>';
       if (b.table) return '<div class="tbl"><table><thead><tr>' + b.table.head.map(function (x) { return '<th>' + md(x) + '</th>'; }).join('') + '</tr></thead><tbody>' + b.table.rows.map(function (r) { return '<tr>' + r.map(function (x) { return '<td>' + md(x) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
       if (b.diagram) { var sl = sceneLesson(b.diagram); return sl ? '<div class="callout say" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span>' + I('play', 15) + '</span><span style="flex:1;min-width:200px"><b style="margin:0">Watch it move</b>' + esc(sl.title) + ' (' + sl.spec.steps.length + ' steps)</span><a class="btn-pop btn-next" href="#' + sl.hash + '">Watch it</a></div>' : ''; }
       if (b.widget) return '<div data-widget="' + esc(b.widget) + '"></div>';
@@ -92,6 +96,7 @@
     var t = [];
     (bl || []).forEach(function (b) {
       if (typeof b === 'string') t.push(b); else if (b.h) t.push(b.h); else if (b.ul) t = t.concat(b.ul); else if (b.ol) t = t.concat(b.ol);
+      else if (b.case) { t.push(b.case.title); t = t.concat(b.case.body || []); } else if (b.check) t = t.concat(b.check);
       else if (b.tip) t.push(b.tip); else if (b.warn) t.push(b.warn); else if (b.say) t.push(b.say); else if (b.table) b.table.rows.forEach(function (r) { t = t.concat(r); });
     });
     return t.join(' ');
@@ -161,11 +166,11 @@
   }
   function textPage(L) {
     var l = L.lesson, nx = next(L), pv = prev(L), heads = [];
-    (l.body || []).forEach(function (b) { if (b.h) heads.push(b.h); });
+    (l.body || []).forEach(function (b) { if (b.h) heads.push(b.h); else if (b.part) heads.push((PARTS[b.part] || {}).t || b.part); });
     var sc = sceneOf(L);
     var outline = heads.length ? '<div class="learn sheet outline"><span class="cap">On this page</span>' + heads.map(function (h, i) { return '<a href="#" data-jump="' + i + '">' + md(h) + '</a>'; }).join('') + '</div>' : '';
     var scenes = sc.length ? '<div class="learn sheet"><span class="cap">See it move</span>' + sc.map(function (s) { return '<a class="btn-pop btn-next" href="#' + s.hash + '">' + I('play', 13) + ' ' + esc(s.short) + '</a>'; }).join('') + '</div>' : '';
-    var bodyHTML = blocks(l.body), n = 0; bodyHTML = bodyHTML.replace(/<h3>/g, function () { return '<h3 id="hd' + (n++) + '">'; });
+    var bodyHTML = blocks(l.body), n = 0; bodyHTML = bodyHTML.replace(/<h3(?=[ >])/g, function () { return '<h3 id="hd' + (n++) + '"'; });
     return '<div class="shell"><aside class="side" id="side"></aside><main class="main"><div class="lesson-grid"><div class="center"><div class="sheet lhead">' + crumbHTML(L) + '<div class="row"><h1>' + esc(l.title) + '</h1><div class="tags">' + tags(L) + '</div></div><p class="sub">' + (L.day ? 'Day ' + L.day.n + ' · ' + esc(L.day.title) : 'Concept deep dive added to cover a gap in the basics') + '</p></div>' +
       '<div class="sheet read"><div class="prose">' + bodyHTML + '</div><div class="lfoot" style="padding-left:0;padding-right:0"><label class="check"><input type="checkbox" data-check="' + L.key + '"' + (S.done[L.key] ? ' checked' : '') + '> ' + (L.deep ? 'I read this' : 'Mark as read') + '</label><span style="display:flex;gap:8px;flex-wrap:wrap">' + (pv ? '<a class="btn-pop" href="#' + pv.hash + '">' + I('back', 13) + ' Previous</a>' : '') + (nx ? '<a class="btn-pop btn-next" href="#' + nx.hash + '">Next: ' + esc(nx.short.length > 28 ? nx.short.slice(0, 27) + '…' : nx.short) + ' ' + I('arrow', 13) + '</a>' : '') + '</span></div></div></div><div class="rightcol">' + scenes + outline + '' + (L.day ? '<div class="learn sheet"><span class="cap">Today</span><a class="btn-pop" href="#plan-' + L.day.n + '">' + I('plan', 13) + ' Day ' + L.day.n + ' plan</a><a class="btn-pop" href="#practice-' + L.day.n + '">' + I('target', 13) + ' Quiz and practice</a></div>' : '<div class="learn sheet"><span class="cap">Apply it</span><a class="btn-pop btn-next" href="#ex">' + I('flag', 13) + ' Mock rounds</a></div>') + '</div></div></main></div>';
   }
