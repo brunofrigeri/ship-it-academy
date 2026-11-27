@@ -17,47 +17,51 @@ function evalCond(n, st) {
 // st: {bugs, changes, orders}  (persists between ticks)
 const THROWN = {};
 function runTick(prog, env, st, rng) {
-  const r = { earned: 0, ops: 0, bugs: 0, fixes: 0, wasted: 0, blocked: 0, lost: 0, rollbacks: 0, deploys: 0, halted: false, counts: {}, bugFrom: [], caught: 0, shipped: 0, overflow: 0, stack: false, arrived: 0 };
+  const r = { earned: 0, ops: 0, bugs: 0, fixes: 0, wasted: 0, blocked: 0, lost: 0, rollbacks: 0, deploys: 0, halted: false, counts: {}, bugFrom: [], caught: 0, shipped: 0, overflow: 0, stack: false, arrived: 0,
+    // diagnostics: per-block money and ops, why ops were wasted, where the CPU ran out, which loops hit the bit limit
+    money: {}, opsBy: {}, why: {}, wastedOps: 0, haltAt: null, capped: {}, from: { earn: 0, ship: 0, deploy: 0 }, opsType: {} };
   if (env.orderRate) { const before = st.orders || 0, next = before + env.orderRate; st.orders = Math.min(MAX_ORDERS, next); r.arrived = st.orders - before; r.overflow = next - st.orders; }
   const fn = findFunc(prog);
   let tryDepth = 0, depth = 0;
-  function pay(c) { if (r.ops + c > env.cpu) { r.halted = true; return false; } r.ops += c; return true; }
+  function pay(c, n) { if (r.ops + c > env.cpu) { r.halted = true; if (!r.haltAt) r.haltAt = n.id; return false; } r.ops += c; r.opsBy[n.id] = (r.opsBy[n.id] || 0) + c; r.opsType[n.t] = (r.opsType[n.t] || 0) + c; return true; }
+  function waste(n, why) { r.wasted++; r.wastedOps += COST[n.t] || 0; r.why[why] = (r.why[why] || 0) + 1; }
+  function gain(n, v, src) { r.earned += v; r.money[n.id] = (r.money[n.id] || 0) + v; r.from[src] += v; }
   // a bug inside try { } becomes an exception: it is caught instead of opening a bug, and the rest of the try body is skipped
   function maybeBug(src) { if (env.bugChance > 0 && rng() < env.bugChance) { if (tryDepth > 0) { r.caught++; throw THROWN; } st.bugs++; r.bugs++; r.bugFrom.push(src); } }
   function exec(list) {
     for (const n of list) {
       if (r.halted) return;
       const c = COST[n.t] || 0;
-      if (!pay(c)) return;
+      if (!pay(c, n)) return;
       r.counts[n.id] = (r.counts[n.id] || 0) + 1;
       switch (n.t) {
         case 'earn':
-          if (st.bugs > 0) { r.wasted++; r.blocked++; } else { maybeBug('earn'); r.earned += env.earnValue; }
+          if (st.bugs > 0) { waste(n, 'blocked'); r.blocked++; } else { maybeBug('earn'); gain(n, env.earnValue, 'earn'); }
           break;
         case 'fix':
-          if (st.bugs > 0) { st.bugs--; r.fixes++; } else r.wasted++;
+          if (st.bugs > 0) { st.bugs--; r.fixes++; } else waste(n, 'fixIdle');
           break;
         case 'repeat': {
-          const times = Math.max(1, Math.min(n.n || 1, env.maxLoop));
+          const times = Math.max(1, Math.min(n.n || 1, env.maxLoop)); if ((n.n || 1) > env.maxLoop) r.capped[n.id] = true;
           for (let i = 0; i < times && !r.halted; i++) exec(n.body);
           break;
         }
         case 'each': { // for (const order of orders): runs once per order waiting right now, no bits needed
-          const times = Math.min(st.orders || 0, MAX_ORDERS);
+          const times = Math.min(st.orders || 0, MAX_ORDERS); if (!times) { r.why.eachEmpty = (r.why.eachEmpty || 0) + 1; r.wastedOps += COST.each; }
           for (let i = 0; i < times && !r.halted; i++) exec(n.body);
           break;
         }
         case 'ship':
-          if (!(st.orders > 0)) { r.wasted++; break; }
-          if (st.bugs > 0) { r.wasted++; r.blocked++; break; }
-          st.orders--; maybeBug('ship'); r.earned += env.orderValue || 0; r.shipped++;
+          if (!(st.orders > 0)) { waste(n, 'shipEmpty'); break; }
+          if (st.bugs > 0) { waste(n, 'blocked'); r.blocked++; break; }
+          st.orders--; maybeBug('ship'); gain(n, env.orderValue || 0, 'ship'); r.shipped++;
           break;
         case 'if':
           exec(evalCond(n, st) ? n.then : n.else);
           break;
         case 'func': break; // a definition does nothing until it is called
         case 'call':
-          if (!fn) { r.wasted++; break; }
+          if (!fn) { waste(n, 'noFunc'); break; }
           if (depth >= 8) { r.stack = true; r.halted = true; return; }
           depth++; exec(fn.body); depth--;
           break;
@@ -66,13 +70,13 @@ function runTick(prog, env, st, rng) {
           try { exec(n.body); tryDepth--; } catch (e) { tryDepth--; if (e !== THROWN) throw e; exec(n.catch || []); }
           break;
         case 'commit': // the release branch holds at most env.maxChanges changes; more commits are wasted
-          if (env.maxChanges && st.changes >= env.maxChanges) { r.wasted++; r.full = true; break; }
+          if (env.maxChanges && st.changes >= env.maxChanges) { waste(n, 'full'); r.full = true; break; }
           maybeBug('commit'); st.changes++;
           break;
         case 'deploy':
-          if (st.changes === 0) { r.wasted++; break; }
-          if (st.bugs > 0) { r.lost += st.changes; st.changes = 0; r.rollbacks++; }
-          else { r.earned += st.changes * st.changes * env.deployValue; st.changes = 0; r.deploys++; }
+          if (st.changes === 0) { waste(n, 'deployEmpty'); break; }
+          if (st.bugs > 0) { r.lost += st.changes; st.changes = 0; r.rollbacks++; r.why.rollback = (r.why.rollback || 0) + 1; }
+          else { gain(n, st.changes * st.changes * env.deployValue, 'deploy'); st.changes = 0; r.deploys++; }
           break;
       }
     }

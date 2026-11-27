@@ -464,3 +464,16 @@ body.in-course{overflow:hidden}
 
 .bits{align-items:center;flex-wrap:wrap}
 .bitsum{font-size:11px;font-weight:700;color:var(--muted);margin-left:6px;font-family:ui-monospace,monospace}
+
+/* last tick, explained */
+.tickrep{margin-top:12px;border:1px solid var(--line2);border-radius:12px;padding:8px 12px;background:var(--card)}
+.tickrep summary{cursor:pointer;font-weight:800;font-size:14px}
+.tickrep summary .lvl{font-weight:500;margin-left:6px}
+.tr-line{font-size:13px;margin-top:8px;line-height:1.45}
+.tr-bad{color:var(--bad,#d93f3f)}
+.tr-list{list-style:none;margin:8px 0 2px;padding:0;display:grid;gap:6px}
+.tr-list li{display:grid;gap:3px;padding:7px 10px;border-radius:9px;font-size:12.5px;line-height:1.4;border-left:3px solid var(--line2);background:var(--field)}
+.tr-list li.bad{border-left-color:var(--bad,#d93f3f)}.tr-list li.warn{border-left-color:var(--rust,#e07b39)}.tr-list li.good{border-left-color:var(--green3)}
+.tr-list small{color:var(--muted);font-size:12px}
+.blk.halt{outline:2px solid var(--bad,#d93f3f);outline-offset:2px}
+.blk.halt>.bh::after{content:'⏹ CPU ran out here';margin-left:8px;font-size:11px;font-weight:800;color:var(--bad,#d93f3f);white-space:nowrap}

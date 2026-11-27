@@ -333,7 +333,27 @@ function Editor(host, opts) {
   }
   host.addEventListener('click', e => { if (suppress) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
   if (opts.palette) opts.palette.addEventListener('click', e => { if (suppress) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
-  ed.showRuns = counts => { host.querySelectorAll('[data-r]').forEach(s => { const c = counts[s.dataset.r] || 0; s.textContent = '×' + c; s.classList.toggle('hot', c > 0); }); };
+  // badges: runs, money and ops of the last tick (containers include everything inside them); mark where the CPU ran out
+  ed.showRuns = (counts, run, mult = 1) => {
+    const tot = {};
+    // the helper's work is counted at the call sites (shared by how often each call ran), not at the definition
+    let fnT = { m: 0, o: 0 }, calls = 0;
+    const own = n => ({ m: run.money[n.id] || 0, o: run.opsBy[n.id] || 0 });
+    const sum = list => { let m = 0, o = 0; for (const n of list) { const a = own(n); m += a.m; o += a.o; for (const k of KIDS) if (n[k]) { const t = sum(n[k]); m += t.m; o += t.o; } } return { m, o }; };
+    const walk = list => { let m = 0, o = 0; for (const n of list) { if (n.t === 'func') { tot[n.id] = null; for (const k of KIDS) if (n[k]) walk(n[k]); continue; } let { m: nm, o: no } = own(n); if (n.t === 'call' && calls) { const sh = (counts[n.id] || 0) / calls; nm += fnT.m * sh; no += fnT.o * sh; } for (const k of KIDS) if (n[k]) { const t = walk(n[k]); nm += t.m; no += t.o; } tot[n.id] = { m: nm, o: no }; m += nm; o += no; } return { m, o }; };
+    if (run && run.money) { const prog = opts.get(), f = (function find(l) { for (const n of l) { if (n.t === 'func') return n; for (const k of KIDS) if (n[k]) { const x = find(n[k]); if (x) return x; } } return null; })(prog);
+      if (f) { fnT = sum(f.body); (function cc(l) { for (const n of l) { if (n.t === 'call') calls += counts[n.id] || 0; for (const k of KIDS) if (n[k]) cc(n[k]); } })(prog); }
+      walk(prog); }
+    host.querySelectorAll('[data-r]').forEach(s => {
+      const id = s.dataset.r, c = counts[id] || 0, t = tot[id];
+      if (run && run.money && tot[id] === null) { s.textContent = `called ×${fmt(calls)}`; s.classList.toggle('hot', calls > 0); s.title = 'How many times helper() was called last tick. Its work is counted on the helper() calls.'; return; }
+      s.textContent = '×' + fmt(c) + (run && t && c ? `${t.m ? ' · ' + money(t.m * mult) : ''} · ${fmt(Math.round(t.o))} op${Math.round(t.o) === 1 ? '' : 's'}` : '');
+      s.classList.toggle('hot', c > 0);
+      s.title = run ? 'Last tick: times it ran · money made (including blocks inside) · ops used (including blocks inside)' : '';
+    });
+    host.querySelectorAll('.blk.halt').forEach(b => b.classList.remove('halt'));
+    if (run && run.haltAt) { const b = host.querySelector(`[data-b="${run.haltAt}"]`); if (b) b.classList.add('halt'); }
+  };
   return ed;
 }
 
@@ -384,6 +404,31 @@ const mainEd = Editor($('editor'), {
   after: () => { $('src').innerHTML = srcOf(S.prog); updateMeters(); mentor(); },
 });
 
+/* "Why this much?" report: where the money and the ops went in the last tick, and what held it back */
+const nodeT = id => { const n = findNode(S.prog, id); return n ? BDEF[n.t].label : 'a block'; };
+function renderTickReport(r, e, gain) {
+  const m = incomeMult(), parts = [['earn()', r.from.earn], ['ship()', r.from.ship], ['deploy()', r.from.deploy]].filter(p => p[1] > 0);
+  const opsTypes = Object.entries(r.opsType).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([t, v]) => `${BDEF[t] ? BDEF[t].label : t} ${fmt(v)}`).join(' · ');
+  const issues = [], w = r.why || {};
+  if (r.haltAt) issues.push(['bad', `⏹ The CPU ran out at <b>${nodeT(r.haltAt)}</b> (marked in red). Everything after it was skipped this tick.`, r.wastedOps ? 'Cut the wasted ops below first; then buy Better CPU.' : 'Buy Better CPU for more ops per tick.']);
+  if (w.eachEmpty) issues.push(['warn', `🔁 <b>for (order of orders)</b> ran ${fmt(w.eachEmpty)}× on an empty array, using ${fmt(w.eachEmpty)} op${w.eachEmpty > 1 ? 's' : ''} for nothing.`, `Only ${fmt(e.orderRate)} order${e.orderRate === 1 ? '' : 's'} arrive per tick, and one for loop already ships them all. Run it once per tick, not inside a repeat. More customers = more orders.`]);
+  if (w.shipEmpty) issues.push(['warn', `📦 <b>ship()</b> ran ${fmt(w.shipEmpty)}× with no orders waiting (${fmt(w.shipEmpty * 2)} ops wasted).`, 'Put ship() inside for (order of orders) so it runs exactly once per order.']);
+  if (w.fixIdle) issues.push(['warn', `🔧 <b>fix()</b> ran ${fmt(w.fixIdle)}× with no bug open (${fmt(w.fixIdle * 4)} ops wasted).`, 'Wrap it in if (bugs > 0) so it only runs when something is broken.']);
+  if (w.blocked) issues.push(['bad', `🐞 ${fmt(w.blocked)} block${w.blocked > 1 ? 's' : ''} paid $0 because a bug was open.`, S.unl.try ? 'Fix bugs first in the tick, or wrap work in try { } so bugs are caught instead of opened.' : 'Put if (bugs > 0) { fix() } at the top of your program.']);
+  Object.keys(r.capped || {}).forEach(id => { const n = findNode(S.prog, id); if (n) issues.push(['warn', `🔢 <b>repeat (${fmt(n.n)})</b> only runs ${fmt(e.maxLoop)}×: that is the limit of your ${bits()}-bit loop counter.`, 'Buy a bit to double it, or nest a second loop.']); });
+  if (w.rollback) issues.push(['bad', `↩ deploy() was rolled back: a bug was open, so all changes were lost.`, 'Fix bugs before deploying (if (bugs > 0) fix() right before deploy).']);
+  if (w.deployEmpty) issues.push(['warn', `🚀 deploy() ran ${fmt(w.deployEmpty)}× with 0 changes (${fmt(w.deployEmpty * 2)} ops wasted).`, 'Only deploy when changes >= k, using if.']);
+  if (w.full) issues.push(['warn', `📦 ${fmt(w.full)} commit${w.full > 1 ? 's were' : ' was'} wasted: the release is full (${fmt(e.maxChanges)} changes).`, 'Deploy sooner, or buy CI pipeline for bigger releases.']);
+  if (w.noFunc) issues.push(['warn', `❓ helper() was called, but there is no function helper() in your program.`, 'Add function helper() { } and put blocks inside it.']);
+  if (r.overflow > 0) issues.push(['warn', `📭 ${fmt(r.overflow)} order${r.overflow > 1 ? 's were' : ' was'} lost: the orders array is full (40).`, 'Ship faster: a for (order of orders) loop with ship() inside.']);
+  if (!S.prog.length) issues.push(['bad', '📭 Your program is empty, so nothing runs.', 'Add an earn() block.']);
+  if (!issues.length && r.ops < e.cpu && S.prog.length) issues.push(['good', `✓ No waste. You still have ${fmt(e.cpu - r.ops)} spare ops each tick.`, 'Use them: raise a repeat count or add more work.']);
+  else if (!issues.length) issues.push(['good', '✓ No waste: every op earned something.', 'To earn more: Faster typing (pay per block), Better CPU (more ops), Overclock (more ticks per second).']);
+  const html = `<div class="tr-line"><b>${money(gain)}</b> this tick${parts.length ? ' = ' + parts.map(([k, v]) => `${k} ${money(v * m)}`).join(' + ') : ''}${m !== 1 && parts.length ? ` <span class="lvl">(includes ×${fmt(m)} bonus)</span>` : ''}</div>
+    <div class="tr-line">⚙️ ${fmt(r.ops)}/${fmt(e.cpu)} ops used${opsTypes ? ': ' + opsTypes : ''}${r.wastedOps ? ` · <b class="tr-bad">${fmt(r.wastedOps)} wasted</b>` : ''}</div>
+    <ul class="tr-list">${issues.slice(0, 5).map(([k, t, tip]) => `<li class="${k}"><span>${t}</span><small>💡 ${tip}</small></li>`).join('')}</ul>`;
+  const box = $('tickRepBody'); if (box.dataset.h !== html) { box.dataset.h = html; box.innerHTML = html; }
+}
 let lastRun = { earned: 0, ops: 0, wasted: 0, counts: {}, halted: false };
 function updateMeters() {
   const e = env(), used = countBlocks(S.prog);
@@ -452,8 +497,9 @@ function tick() {
   const gain = lastRun.earned * incomeMult();
   S.money += gain; S.total += gain;
   S.rate = S.rate * 0.8 + gain * tps() * 0.2;
-  mainEd.showRuns(lastRun.counts);
-  $('sEarn').textContent = money(gain); $('sBugs').textContent = S.st.bugs; $('sChg').textContent = S.st.changes; $('sOrd').textContent = S.st.orders || 0; $('ordStat').hidden = !S.unl.each; $('sWaste').textContent = lastRun.wasted;
+  mainEd.showRuns(lastRun.counts, lastRun, incomeMult());
+  renderTickReport(lastRun, e, gain);
+  $('sEarn').textContent = money(gain); $('sBugs').textContent = S.st.bugs; $('sChg').textContent = S.st.changes; $('sOrd').textContent = S.st.orders || 0; $('ordStat').hidden = !S.unl.each; $('sWaste').textContent = fmt(lastRun.wastedOps || 0);
   // bug bookkeeping: new bugs join the queue, fix() patches the oldest
   const born = lastRun.bugFrom.map(makeBug); S.bugList.push(...born);
   const fixed = S.bugList.splice(0, Math.min(lastRun.fixes, S.bugList.length)); syncBugs();
